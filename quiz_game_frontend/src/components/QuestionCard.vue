@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { QuizQuestion } from '@/stores/quiz'
+import { useQuizStore } from '@/stores/quiz'
 
-// define props without assigning to an unused variable to satisfy eslint
-defineProps<{
+const props = defineProps<{
   question: QuizQuestion
   selectedIndex: number | null
   hasSubmitted: boolean
@@ -11,6 +12,15 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'select', index: number): void
 }>()
+
+const quiz = useQuizStore()
+
+// compute hidden indices for current question if fifty-fifty used
+const hidden = computed(() => {
+  const qid = props.question.id
+  const arr = quiz.fiftyFiftyHidden[qid] ?? []
+  return new Set(arr)
+})
 
 function onKeydownOption(e: KeyboardEvent, idx: number) {
   const keys = ['Enter', ' ']
@@ -27,6 +37,13 @@ function onKeydownOption(e: KeyboardEvent, idx: number) {
       <h3 class="q-title">
         {{ question.question }}
       </h3>
+
+      <!-- Hint panel -->
+      <div v-if="quiz.hintShown[question.id] && question.hint" class="hint card" role="note" aria-live="polite">
+        <span class="hint-emoji" aria-hidden="true">💡</span>
+        <span class="hint-text">{{ question.hint }}</span>
+      </div>
+
       <div class="stack-lg" role="listbox" aria-label="Answer options">
         <button
           v-for="(opt, idx) in question.options"
@@ -35,10 +52,13 @@ function onKeydownOption(e: KeyboardEvent, idx: number) {
           :class="{
             selected: selectedIndex === idx && !hasSubmitted,
             correct: hasSubmitted && idx === question.answerIndex,
-            incorrect: hasSubmitted && selectedIndex === idx && idx !== question.answerIndex
+            incorrect: hasSubmitted && selectedIndex === idx && idx !== question.answerIndex,
+            hiddenOpt: hidden.has(idx)
           }"
           role="option"
           :aria-selected="selectedIndex === idx"
+          :aria-disabled="hidden.has(idx)"
+          :disabled="hidden.has(idx)"
           @click="emit('select', idx)"
           @keydown="onKeydownOption($event, idx)"
         >
@@ -110,6 +130,51 @@ function onKeydownOption(e: KeyboardEvent, idx: number) {
 .opt-text {
   font-weight: 500;
 }
+
+/* Options */
+.option {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: var(--text);
+  border-radius: .875rem;
+  padding: .875rem 1rem;
+  text-align: left;
+  width: 100%;
+  transition: all .2s ease;
+}
+.option:hover { background: #f9fafb; }
+.option.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+.option.correct {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+.option.incorrect {
+  border-color: var(--error);
+  background: #fef2f2;
+}
+.option.hiddenOpt {
+  opacity: .25;
+  pointer-events: none;
+  filter: grayscale(0.3);
+}
+
+/* Hint panel */
+.hint {
+  margin-top: .25rem;
+  padding: .7rem .8rem;
+  border-radius: .8rem;
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
+  color: #1e3a8a;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.hint-emoji { font-size: 1.1rem; }
+.hint-text { font-weight: 600; }
 
 /* Explanation panel styled with Ocean Professional theme */
 .explain {

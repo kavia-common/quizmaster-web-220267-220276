@@ -6,6 +6,8 @@ const props = defineProps<{
   total: number
   score: number
   categoryLabel?: string
+  // Optional minimal timer display (seconds remaining). When null, hidden.
+  remainingSeconds?: number | null
 }>()
 
 const pct = computed(() => {
@@ -29,6 +31,9 @@ const pct = computed(() => {
       <div class="score">
         <span class="score-label">Score</span>
         <span class="score-value" aria-live="polite">{{ score }}</span>
+        <div v-if="props.remainingSeconds != null" class="timer" role="timer" :aria-label="`Time remaining ${props.remainingSeconds} seconds`">
+          ⏱️ <span class="timer-val">{{ props.remainingSeconds }}s</span>
+        </div>
       </div>
     </div>
   </div>
@@ -70,6 +75,16 @@ const pct = computed(() => {
   justify-items: end;
   min-width: 90px;
 }
+.timer {
+  margin-top: .1rem;
+  font-size: .85rem;
+  color: var(--muted);
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: .5rem;
+  padding: .1rem .35rem;
+}
+.timer-val { font-weight: 700; color: var(--primary); }
 .score-label {
   color: var(--muted);
   font-size: .75rem;

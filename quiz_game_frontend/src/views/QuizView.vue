@@ -8,6 +8,8 @@ import QuestionCard from '@/components/QuestionCard.vue'
 const router = useRouter()
 const quiz = useQuizStore()
 
+let timerInterval: number | undefined
+
 async function ensureHydrated() {
   // Try resume/hydrate if saved session exists and questions are empty
   if (!quiz.questions.length && quiz.hasSavedSession()) {
@@ -16,12 +18,33 @@ async function ensureHydrated() {
   if (!quiz.questions.length && !quiz.loading) {
     await quiz.loadQuestions()
   }
+  startTicking()
+}
+
+function startTicking() {
+  // Lightweight ticking each second only if timer is active
+  stopTicking()
+  timerInterval = window.setInterval(() => {
+    if (quiz.timerState.remaining != null) {
+      quiz.tickTimer(1)
+    }
+  }, 1000)
+}
+function stopTicking() {
+  if (timerInterval) {
+    clearInterval(timerInterval)
+    timerInterval = undefined
+  }
 }
 
 function handleSubmitOrNext() {
   if (quiz.hasSubmitted) {
     if (!quiz.nextQuestion()) {
+      stopTicking()
       router.push({ name: 'results' })
+    } else {
+      // continue ticking for next question
+      startTicking()
     }
     return
   }
@@ -57,12 +80,38 @@ function exitQuiz() {
   router.push({ name: 'start' })
 }
 
+function lifelineFifty() {
+  quiz.useFiftyFifty()
+}
+function lifelineSkip() {
+  const { ok } = quiz.useSkipQuestion()
+  if (ok) {
+    // immediately go to next or results
+    if (quiz.isLast) {
+      // persist end and go to results
+      stopTicking()
+      router.push({ name: 'results' })
+    } else {
+      quiz.nextQuestion()
+      startTicking()
+    }
+  }
+}
+function lifelineExtra() {
+  quiz.useExtraTime()
+  startTicking()
+}
+function lifelineHint() {
+  quiz.useAskHint()
+}
+
 onMounted(() => {
   ensureHydrated()
   window.addEventListener('keydown', handleKey)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKey)
+  stopTicking()
 })
 </script>
 
@@ -80,6 +129,7 @@ onBeforeUnmount(() => {
         history: 'History',
         geography: 'Geography'
       }[quiz.selectedCategory]"
+      :remaining-seconds="quiz.timerState.remaining ?? null"
     />
 
     <div class="save-indicator" role="status" aria-live="polite">
@@ -102,6 +152,56 @@ onBeforeUnmount(() => {
       @select="quiz.selectOption"
     />
 
+    <!-- Lifelines -->
+    <div class="lifelines card" role="group" aria-label="Lifelines">
+      <div class="lifelines-row">
+        <button
+          class="btn btn-secondary"
+          :class="{ 'btn-disabled': quiz.lifelines.fiftyFiftyUsed }"
+          :disabled="quiz.lifelines.fiftyFiftyUsed"
+          @click="lifelineFifty"
+          aria-label="Use 50-50 to remove two incorrect options"
+          title="50-50: remove two wrong options"
+        >
+          50-50
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          :class="{ 'btn-disabled': quiz.lifelines.skipUsed }"
+          :disabled="quiz.lifelines.skipUsed"
+          @click="lifelineSkip"
+          aria-label="Skip this question"
+          title="Skip question (no penalty)"
+        >
+          Skip
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          :class="{ 'btn-disabled': quiz.lifelines.extraTimeUsed }"
+          :disabled="quiz.lifelines.extraTimeUsed"
+          @click="lifelineExtra"
+          aria-label="Add extra time for this question"
+          title="Extra time (+15s)"
+        >
+          +15s
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          :class="{ 'btn-disabled': quiz.lifelines.askHintUsed }"
+          :disabled="quiz.lifelines.askHintUsed"
+          @click="lifelineHint"
+          aria-label="Reveal a hint"
+          title="Ask for a hint"
+        >
+          Hint
+        </button>
+      </div>
+      <p class="lifeline-hint">Each lifeline can be used once per quiz.</p>
+    </div>
+
     <div class="actions">
       <button
         class="btn btn-secondary"
@@ -117,7 +217,7 @@ onBeforeUnmount(() => {
         v-if="!quiz.hasSubmitted"
         class="btn btn-primary"
         :disabled="quiz.selectedIndex === null"
-        @click="quiz.submitAnswer"
+        @click="handleSubmitOrNext"
       >
         Submit
       </button>
@@ -125,7 +225,7 @@ onBeforeUnmount(() => {
       <button
         v-else
         class="btn btn-primary"
-        @click="quiz.isLast ? $router.push({ name: 'results' }) : quiz.nextQuestion()"
+        @click="handleSubmitOrNext"
       >
         {{ quiz.isLast ? 'See Results' : 'Continue' }}
       </button>
@@ -167,5 +267,20 @@ onBeforeUnmount(() => {
   color: var(--muted);
   font-size: .9rem;
   margin-left: .25rem;
+}
+
+/* Lifelines styling matching Ocean Professional theme */
+.lifelines {
+  padding: .75rem;
+}
+.lifelines-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.lifeline-hint {
+  margin-top: .35rem;
+  font-size: .85rem;
+  color: var(--muted);
 }
 </style>
