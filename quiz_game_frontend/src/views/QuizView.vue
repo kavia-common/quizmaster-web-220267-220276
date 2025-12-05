@@ -59,6 +59,14 @@ onBeforeUnmount(() => {
       :current="quiz.currentIndex"
       :total="quiz.total"
       :score="quiz.score"
+      :category-label="{
+        gk: 'General Knowledge',
+        sports: 'Sports',
+        movies: 'Movies',
+        science: 'Science',
+        history: 'History',
+        geography: 'Geography'
+      }[quiz.selectedCategory]"
     />
 
     <div v-if="quiz.loading" class="card loading">

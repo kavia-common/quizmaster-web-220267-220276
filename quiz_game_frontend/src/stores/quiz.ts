@@ -8,14 +8,51 @@ export type QuizQuestion = {
   answerIndex: number
 }
 
-const fallbackQuestions: QuizQuestion[] = [
-  { id: 1, question: 'What is the capital of France?', options: ['Madrid', 'Paris', 'Berlin', 'Rome'], answerIndex: 1 },
-  { id: 2, question: 'Which planet is known as the Red Planet?', options: ['Venus', 'Saturn', 'Mars', 'Jupiter'], answerIndex: 2 },
-  { id: 3, question: 'What is 9 + 10?', options: ['18', '19', '20'], answerIndex: 1 },
-  { id: 4, question: 'Which language runs in a web browser?', options: ['Java', 'C', 'Python', 'JavaScript'], answerIndex: 3 },
-  { id: 5, question: 'Who painted the Mona Lisa?', options: ['Picasso', 'Da Vinci', 'Van Gogh'], answerIndex: 1 },
-  { id: 6, question: 'HTTP stands for?', options: ['HyperText Transfer Protocol', 'High Transfer Text Protocol', 'Hyperlink Transmission Process'], answerIndex: 0 },
-]
+export type CategoryKey = 'gk' | 'sports' | 'movies' | 'science' | 'history' | 'geography'
+
+// Simple sample fallback pools per category to keep UX coherent when no backend is configured
+const fallbackPools: Record<CategoryKey, QuizQuestion[]> = {
+  gk: [
+    { id: 'gk-1', question: 'What is the capital of France?', options: ['Madrid', 'Paris', 'Berlin', 'Rome'], answerIndex: 1 },
+    { id: 'gk-2', question: 'What is 9 + 10?', options: ['18', '19', '20'], answerIndex: 1 },
+    { id: 'gk-3', question: 'Which language runs in a web browser?', options: ['Java', 'C', 'Python', 'JavaScript'], answerIndex: 3 },
+  ],
+  sports: [
+    { id: 'sp-1', question: 'How many players in a football (soccer) team on the field?', options: ['9', '10', '11', '12'], answerIndex: 2 },
+    { id: 'sp-2', question: 'In tennis, what is 0 points called?', options: ['Null', 'Love', 'Zero', 'Nil'], answerIndex: 1 },
+    { id: 'sp-3', question: 'Which country hosts the Tour de France?', options: ['Italy', 'France', 'Spain', 'Belgium'], answerIndex: 1 },
+  ],
+  movies: [
+    { id: 'mv-1', question: 'Who directed Inception?', options: ['Steven Spielberg', 'Christopher Nolan', 'James Cameron', 'Ridley Scott'], answerIndex: 1 },
+    { id: 'mv-2', question: 'The Hobbit is set in which world?', options: ['Narnia', 'Earthsea', 'Middle-earth', 'Westeros'], answerIndex: 2 },
+    { id: 'mv-3', question: 'Which film features a DeLorean time machine?', options: ['Back to the Future', 'Terminator', 'Looper', 'Primer'], answerIndex: 0 },
+  ],
+  science: [
+    { id: 'sc-1', question: 'Which planet is known as the Red Planet?', options: ['Venus', 'Saturn', 'Mars', 'Jupiter'], answerIndex: 2 },
+    { id: 'sc-2', question: 'H2O is the chemical formula for?', options: ['Hydrogen', 'Oxygen', 'Water', 'Helium'], answerIndex: 2 },
+    { id: 'sc-3', question: 'Speed of light is approximately?', options: ['3x10^8 m/s', '3x10^6 m/s', '30000 km/s', '3x10^10 m/s'], answerIndex: 0 },
+  ],
+  history: [
+    { id: 'hs-1', question: 'Who painted the Mona Lisa?', options: ['Picasso', 'Da Vinci', 'Van Gogh'], answerIndex: 1 },
+    { id: 'hs-2', question: 'The pyramids are located in which country?', options: ['Peru', 'Egypt', 'Mexico', 'China'], answerIndex: 1 },
+    { id: 'hs-3', question: 'World War II ended in which year?', options: ['1943', '1944', '1945', '1946'], answerIndex: 2 },
+  ],
+  geography: [
+    { id: 'ge-1', question: 'Which is the largest ocean?', options: ['Atlantic', 'Indian', 'Pacific', 'Arctic'], answerIndex: 2 },
+    { id: 'ge-2', question: 'Mount Everest is in which mountain range?', options: ['Andes', 'Himalayas', 'Alps', 'Rockies'], answerIndex: 1 },
+    { id: 'ge-3', question: 'The Nile river flows into which sea?', options: ['Black Sea', 'Red Sea', 'Mediterranean Sea', 'Arabian Sea'], answerIndex: 2 },
+  ],
+}
+
+// Map UI categories to backend parameter values
+const categoryParamMap: Record<CategoryKey, string> = {
+  gk: 'general',
+  sports: 'sports',
+  movies: 'movies',
+  science: 'science',
+  history: 'history',
+  geography: 'geography',
+}
 
 // PUBLIC_INTERFACE
 export const useQuizStore = defineStore('quiz', () => {
@@ -29,6 +66,9 @@ export const useQuizStore = defineStore('quiz', () => {
   const hasSubmitted = ref(false)
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  // Category state
+  const selectedCategory = ref<CategoryKey>('gk')
 
   const total = computed(() => questions.value.length)
   const current = computed(() => questions.value[currentIndex.value] || null)
@@ -50,15 +90,33 @@ export const useQuizStore = defineStore('quiz', () => {
   }
 
   // PUBLIC_INTERFACE
+  function setCategory(cat: CategoryKey) {
+    selectedCategory.value = cat
+  }
+
+  function buildQuestionsUrl(): string {
+    const apiBase =
+      (import.meta.env.VITE_API_BASE as string) ||
+      (import.meta.env.VITE_BACKEND_URL as string) ||
+      ''
+    if (!apiBase) return ''
+    const base = apiBase.replace(/\/+$/, '')
+    const param = categoryParamMap[selectedCategory.value] ?? selectedCategory.value
+    // Add category as query param if supported by backend
+    const url = new URL(`${base}/api/questions`)
+    url.searchParams.set('category', param)
+    return url.toString()
+  }
+
+  // PUBLIC_INTERFACE
   async function loadQuestions(): Promise<void> {
     loading.value = true
     error.value = null
     try {
-      const apiBase = (import.meta.env.VITE_API_BASE as string) || (import.meta.env.VITE_BACKEND_URL as string) || ''
-      const url = apiBase ? `${apiBase.replace(/\/+$/, '')}/api/questions` : ''
+      const url = buildQuestionsUrl()
       if (!url) {
-        // No backend configured; use fallback
-        questions.value = fallbackQuestions
+        // No backend configured; use fallback by category
+        questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
         return
       }
 
@@ -73,7 +131,7 @@ export const useQuizStore = defineStore('quiz', () => {
 
       // Expect format: [{id, question, options, answerIndex}]
       if (!Array.isArray(data) || !data.length) {
-        questions.value = fallbackQuestions
+        questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
         return
       }
       // Simple validation/coercion
@@ -96,12 +154,15 @@ export const useQuizStore = defineStore('quiz', () => {
         })
 
       if (!questions.value.length) {
-        questions.value = fallbackQuestions
+        questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
       }
     } catch (e: unknown) {
-      const msg = (e && typeof e === 'object' && 'message' in e) ? String((e as { message?: string }).message) : 'Failed to load questions'
+      const msg =
+        e && typeof e === 'object' && 'message' in e
+          ? String((e as { message?: string }).message)
+          : 'Failed to load questions'
       error.value = msg
-      questions.value = fallbackQuestions
+      questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
     } finally {
       loading.value = false
     }
@@ -138,10 +199,26 @@ export const useQuizStore = defineStore('quiz', () => {
 
   return {
     // state
-    questions, currentIndex, score, selectedIndex, hasSubmitted, loading, error,
+    questions,
+    currentIndex,
+    score,
+    selectedIndex,
+    hasSubmitted,
+    loading,
+    error,
+    selectedCategory,
     // derived
-    total, current, progress, isLast,
+    total,
+    current,
+    progress,
+    isLast,
     // actions
-    resetAll, loadQuestions, selectOption, submitAnswer, nextQuestion, resetRuntime,
+    resetAll,
+    loadQuestions,
+    selectOption,
+    submitAnswer,
+    nextQuestion,
+    resetRuntime,
+    setCategory,
   }
 })
