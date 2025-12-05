@@ -3,14 +3,18 @@ import { useRouter } from 'vue-router'
 import { useQuizStore, type CategoryKey } from '@/stores/quiz'
 import { computed, ref, onMounted } from 'vue'
 import { useDailyQuizStore } from '@/stores/dailyQuiz'
+import { useOfflineStore } from '@/stores/offline'
+import { downloadAllCategories, downloadCategoryPack, exportPackToJson, importPackFromJson } from '@/utils/offlineService'
 
 const router = useRouter()
 const quiz = useQuizStore()
 const daily = useDailyQuizStore()
+const offline = useOfflineStore()
 
 const busy = ref(false)
 const loadError = ref<string | null>(null)
 const arAnnounce = ref('')
+const progressMsg = ref('')
 
 const categories: Array<{ key: CategoryKey; label: string; emoji: string; hint: string }> = [
   { key: 'gk', label: 'General Knowledge', emoji: '🧠', hint: 'A bit of everything' },
@@ -39,6 +43,56 @@ const sessionCategoryLabel = computed(() => {
 
 const todayKey = computed(() => daily.getPersistentOverview().dailyDate)
 const dailyStreak = computed(() => daily.getPersistentOverview().streakCount)
+
+// Offline helpers
+const offlineEnabled = computed({
+  get: () => offline.enabled,
+  set: (v: boolean) => offline.setEnabled(v),
+})
+function statusLabel(c: CategoryKey): string {
+  const p = offline.getPack(c)
+  if (!p) return 'Not downloaded'
+  return `Available • ${p.meta.size} • ${new Date(p.meta.lastUpdated).toLocaleDateString()}`
+}
+async function downloadCat(c: CategoryKey) {
+  progressMsg.value = `Downloading ${c}…`
+  const res = await downloadCategoryPack(c)
+  progressMsg.value = res.message
+}
+async function downloadAll() {
+  progressMsg.value = 'Downloading all…'
+  const res = await downloadAllCategories((c, i, total, s) => {
+    progressMsg.value = `(${i}/${total}) ${c}: ${s}`
+  })
+  progressMsg.value = res.summary
+}
+function exportCat(c: CategoryKey) {
+  const res = exportPackToJson(c)
+  if (!res.ok || !res.json) {
+    window.alert(res.message || 'Nothing to export')
+    return
+  }
+  const blob = new Blob([res.json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `quiz_pack_${c}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+async function importCat(c: CategoryKey) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'application/json'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    const res = importPackFromJson(c, text)
+    window.alert(res.message)
+  }
+  input.click()
+}
 
 async function start() {
   if (hasSession.value) {
@@ -103,6 +157,49 @@ onMounted(() => {
       <p class="hero-sub">Choose a category to begin your journey.</p>
 
       <span class="sr-only" aria-live="polite">{{ arAnnounce }}</span>
+
+      <!-- Offline mode controls -->
+      <div class="offline card">
+        <div class="offline-left">
+          <div class="offline-badge" aria-hidden="true">Offline</div>
+          <div class="offline-info">
+            <div class="offline-title">Offline Mode</div>
+            <div class="offline-sub">
+              Play using downloaded question packs. 
+              <span v-if="!offlineEnabled">Toggle on to prefer cached questions.</span>
+            </div>
+          </div>
+        </div>
+        <div class="offline-right">
+          <label class="switch">
+            <input type="checkbox" :checked="offlineEnabled" @change="offlineEnabled = ($event.target as HTMLInputElement).checked" aria-label="Toggle Offline Mode">
+            <span class="slider"></span>
+          </label>
+          <button class="btn btn-secondary" @click="downloadAll" title="Download all categories">Download All</button>
+          <button class="btn btn-secondary" @click="router.push({ name: 'offline-manage' })" title="Manage cached packs">Manage</button>
+        </div>
+      </div>
+      <p v-if="progressMsg" class="progress-msg" aria-live="polite">{{ progressMsg }}</p>
+
+      <!-- Category cache status and actions -->
+      <div class="offline-grid">
+        <div v-for="c in categories" :key="c.key" class="offline-row">
+          <div class="off-cat">
+            <span class="cat-emoji" aria-hidden="true">{{ c.emoji }}</span>
+            <span class="cat-label">{{ c.label }}</span>
+          </div>
+          <div class="off-status">
+            <span class="badge" :class="offline.getPack(c.key) ? 'badge-ok' : 'badge-warn'">
+              {{ statusLabel(c.key) }}
+            </span>
+          </div>
+          <div class="off-actions">
+            <button class="btn btn-secondary btn-xs" @click="downloadCat(c.key)">Download/Refresh</button>
+            <button class="btn btn-secondary btn-xs" @click="exportCat(c.key)">Export</button>
+            <button class="btn btn-secondary btn-xs" @click="importCat(c.key)">Import</button>
+          </div>
+        </div>
+      </div>
 
       <div class="daily card">
         <div class="daily-left">
@@ -278,6 +375,50 @@ onMounted(() => {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap; border: 0;
 }
+
+.offline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  background: var(--surface);
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: .75rem .9rem;
+  margin: .5rem 0 1rem;
+}
+.offline-left { display: flex; align-items: center; gap: .75rem; }
+.offline-badge {
+  padding: .1rem .5rem;
+  font-size: .75rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--secondary);
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+.offline-info { display: grid; gap: .1rem; }
+.offline-title { font-weight: 800; color: var(--text); }
+.offline-sub { font-size: .85rem; color: var(--muted); }
+.offline-right { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #e5e7eb; transition: .2s; border-radius: 999px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+.switch input:checked + .slider { background-color: var(--primary); }
+.switch input:checked + .slider:before { transform: translateX(20px); }
+
+.progress-msg { font-size: .85rem; color: var(--muted); margin-top: -.5rem; margin-bottom: .5rem; }
+
+.offline-grid { display: grid; grid-template-columns: 1fr; gap: .5rem; margin-bottom: .25rem; }
+.offline-row { display: grid; grid-template-columns: 1.2fr .8fr auto; align-items: center; gap: .5rem; border: 1px solid #e5e7eb; background: #fff; border-radius: .75rem; padding: .5rem .6rem; }
+.off-cat { display: flex; align-items: center; gap: .5rem; }
+.off-status { text-align: left; }
+.off-actions { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
+
+.badge-ok { color: var(--primary); background: #f0f7ff; border-color: #dbeafe; }
+.badge-warn { color: #92400e; background: #fffbeb; border-color: #fde68a; }
 
 .daily {
   display: flex;

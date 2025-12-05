@@ -236,12 +236,24 @@ export const useDailyQuizStore = defineStore('dailyQuiz', () => {
 
       // Pool aggregation: if category null, mix all categories evenly-ish
       let source: QuizQuestion[] = []
-      if (category) {
-        source = pools[category] ?? []
-      } else {
-        // mix from all categories
-        const all: QuizQuestion[] = Object.values(pools).flat()
-        source = all
+      try {
+        const { useOfflineStore } = await import('./offline')
+        const offline = useOfflineStore()
+        if (offline.enabled) {
+          if (category) {
+            source = offline.getPack(category)?.questions ?? []
+          } else {
+            source = offline.categories.flatMap((c) => offline.getPack(c)?.questions ?? [])
+          }
+        }
+      } catch {}
+      if (!source.length) {
+        if (category) {
+          source = pools[category] ?? []
+        } else {
+          const all: QuizQuestion[] = Object.values(pools).flat()
+          source = all
+        }
       }
       if (!source.length) {
         throw new Error('No questions available')

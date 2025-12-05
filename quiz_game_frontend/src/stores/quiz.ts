@@ -539,74 +539,95 @@ export const useQuizStore = defineStore('quiz', () => {
     loading.value = true
     error.value = null
     try {
-      const url = buildQuestionsUrl()
-      if (!url) {
-        // No backend configured; use fallback by category
-        questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
-        // initialize session metadata on first load
-        if (!startedAt.value) startedAt.value = Date.now()
-        updatedAt.value = Date.now()
-        persistSession()
-        return
-      }
+      // 1) If offline mode is enabled and a cached pack exists, use it immediately
+      const { useOfflineStore } = await import('./offline')
+      const offline = useOfflineStore()
+      const cached = offline.getPack(selectedCategory.value)
+      const offlinePreferred = offline.enabled
 
-      // fetch with timeout
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 6000)
-      const res = await fetch(url, { signal: controller.signal })
-      clearTimeout(timeout)
-
-      if (!res.ok) throw new Error(`Failed to load questions: ${res.status}`)
-      const data: unknown = await res.json()
-
-      // Expect format: [{id, question, options, answerIndex}]
-      if (!Array.isArray(data) || !data.length) {
-        questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+      if (offlinePreferred && cached?.questions?.length) {
+        questions.value = cached.questions
       } else {
-        // Simple validation/coercion
-        questions.value = (data as unknown[])
-          .filter((q: unknown) => {
-            if (!q || typeof q !== 'object') return false
-            const obj = q as Record<string, unknown>
-            return typeof obj.question === 'string' &&
-                   Array.isArray(obj.options) &&
-                   typeof obj.answerIndex === 'number'
-          })
-          .map((q: unknown, i: number): QuizQuestion => {
-            const obj = q as Record<string, unknown>
-            const explanation =
-              (typeof obj.explanation === 'string' ? (obj.explanation as string) : undefined) ??
-              (typeof (obj as Record<string, unknown>).detail === 'string' ? String((obj as Record<string, unknown>).detail) : undefined)
-            const referenceUrl = typeof obj.referenceUrl === 'string' ? (obj.referenceUrl as string) : undefined
-            const source = typeof obj.source === 'string' ? (obj.source as string) : undefined
-            const hint =
-              (typeof (obj as Record<string, unknown>).hint === 'string'
-                ? String((obj as Record<string, unknown>).hint)
-                : undefined) ??
-              (typeof (obj as Record<string, unknown>).clue === 'string'
-                ? String((obj as Record<string, unknown>).clue)
-                : undefined)
-            return {
-              id: (obj.id as string | number | undefined) ?? i + 1,
-              question: String(obj.question),
-              options: (obj.options as unknown[]).map(String),
-              answerIndex: Number(obj.answerIndex),
-              explanation,
-              referenceUrl,
-              source,
-              hint,
+        // 2) Otherwise attempt network fetch if backend configured
+        const url = buildQuestionsUrl()
+        if (url) {
+          try {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), 6000)
+            const res = await fetch(url, { signal: controller.signal })
+            clearTimeout(timeout)
+            if (!res.ok) throw new Error(`Failed to load questions: ${res.status}`)
+            const data: unknown = await res.json()
+            const list = Array.isArray(data) ? data : []
+            const normalized: QuizQuestion[] = list
+              .filter((q: unknown) => {
+                if (!q || typeof q !== 'object') return false
+                const obj = q as Record<string, unknown>
+                return typeof obj.question === 'string' && Array.isArray(obj.options) && typeof obj.answerIndex === 'number'
+              })
+              .map((q: unknown, i: number): QuizQuestion => {
+                const obj = q as Record<string, unknown>
+                const explanation =
+                  (typeof obj.explanation === 'string' ? (obj.explanation as string) : undefined) ??
+                  (typeof (obj as Record<string, unknown>).detail === 'string' ? String((obj as Record<string, unknown>).detail) : undefined)
+                const referenceUrl = typeof obj.referenceUrl === 'string' ? (obj.referenceUrl as string) : undefined
+                const source = typeof obj.source === 'string' ? (obj.source as string) : undefined
+                const hint =
+                  (typeof (obj as Record<string, unknown>).hint === 'string'
+                    ? String((obj as Record<string, unknown>).hint)
+                    : undefined) ??
+                  (typeof (obj as Record<string, unknown>).clue === 'string'
+                    ? String((obj as Record<string, unknown>).clue)
+                    : undefined)
+                return {
+                  id: (obj.id as string | number | undefined) ?? i + 1,
+                  question: String(obj.question),
+                  options: (obj.options as unknown[]).map(String),
+                  answerIndex: Number(obj.answerIndex),
+                  explanation,
+                  referenceUrl,
+                  source,
+                  hint,
+                }
+              })
+            if (normalized.length) {
+              questions.value = normalized
+              // Save latest network data to offline cache as a refresh (if user has enabled offline)
+              if (offline.enabled) {
+                offline.savePack(selectedCategory.value, normalized, 'v1')
+              }
+            } else if (cached?.questions?.length) {
+              // Network returned empty; fallback to cache
+              questions.value = cached.questions
+            } else {
+              questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
             }
-          })
-
-        if (!questions.value.length) {
-          questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+          } catch (fetchErr) {
+            // Network failed; try cached, then fallback
+            if (cached?.questions?.length) {
+              questions.value = cached.questions
+            } else {
+              questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+            }
+            const msg =
+              fetchErr && typeof fetchErr === 'object' && 'message' in fetchErr
+                ? String((fetchErr as { message?: string }).message)
+                : 'Failed to load questions'
+            error.value = msg
+          }
+        } else {
+          // No backend configured; prefer cached pack if present
+          if (cached?.questions?.length) {
+            questions.value = cached.questions
+          } else {
+            questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+          }
         }
       }
 
       // initialize session metadata on first load
       if (!startedAt.value) startedAt.value = Date.now()
       updatedAt.value = Date.now()
-      // mark start time for first question
       const firstId = questions.value[0]?.id
       if (firstId != null && qStartTs.value[firstId] == null) {
         qStartTs.value[firstId] = Date.now()
