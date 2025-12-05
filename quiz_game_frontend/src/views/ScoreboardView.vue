@@ -38,6 +38,7 @@ function goHome() {
       </div>
       <div class="right">
         <button class="btn btn-secondary" @click="goHome">Back</button>
+        <button class="btn btn-secondary" @click="$router.push({ name: 'analytics' })">View Analytics</button>
         <button
           class="btn"
           :class="confirmingClear ? 'btn-danger' : 'btn-secondary'"

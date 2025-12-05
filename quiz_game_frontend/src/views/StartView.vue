@@ -12,7 +12,7 @@ const busy = ref(false)
 const loadError = ref<string | null>(null)
 const arAnnounce = ref('')
 
-const categories: { key: CategoryKey; label: string; emoji: string; hint: string }[] = [
+const categories: Array<{ key: CategoryKey; label: string; emoji: string; hint: string }> = [
   { key: 'gk', label: 'General Knowledge', emoji: '🧠', hint: 'A bit of everything' },
   { key: 'sports', label: 'Sports', emoji: '🏅', hint: 'Games and records' },
   { key: 'movies', label: 'Movies', emoji: '🎬', hint: 'Cinema & film trivia' },
@@ -25,10 +25,17 @@ const picked = ref<CategoryKey>(quiz.selectedCategory ?? 'gk')
 const hasSession = computed(() => quiz.hasSavedSession())
 const hasDailySession = computed(() => daily.hasSavedDaily())
 const sessionProgress = computed(() => quiz.progress)
-const sessionCategoryLabel = computed(() => ({
-  gk: 'General Knowledge', sports: 'Sports', movies: 'Movies',
-  science: 'Science', history: 'History', geography: 'Geography'
-}[quiz.selectedCategory] || quiz.selectedCategory))
+const sessionCategoryLabel = computed(() => {
+  const map: Record<'gk'|'sports'|'movies'|'science'|'history'|'geography', string> = {
+    gk: 'General Knowledge',
+    sports: 'Sports',
+    movies: 'Movies',
+    science: 'Science',
+    history: 'History',
+    geography: 'Geography'
+  }
+  return map[quiz.selectedCategory as 'gk'|'sports'|'movies'|'science'|'history'|'geography'] || quiz.selectedCategory
+})
 
 const todayKey = computed(() => daily.getPersistentOverview().dailyDate)
 const dailyStreak = computed(() => daily.getPersistentOverview().streakCount)
@@ -173,6 +180,15 @@ onMounted(() => {
           aria-label="Multiplayer lobby"
         >
           Multiplayer
+        </button>
+        <button
+          class="btn btn-secondary"
+          @click="router.push({ name: 'analytics' })"
+          :disabled="busy"
+          title="View analytics"
+          aria-label="View analytics"
+        >
+          View Analytics
         </button>
       </div>
       <p v-if="loadError" class="error">{{ loadError }}</p>

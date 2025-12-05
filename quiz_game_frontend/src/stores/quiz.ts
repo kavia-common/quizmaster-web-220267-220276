@@ -68,6 +68,9 @@ type SessionSchema = {
   hintShown: Record<string | number, boolean>
   // simple per-question timer remaining; optional; stored to resume gently
   timers: Record<string | number, number | null>
+  // analytics timing fields
+  qStartTs: Record<string | number, number> // when question became visible
+  qEndTs: Record<string | number, number>   // when answered/submitted/skipped
 }
 
 // Simple sample fallback pools per category to keep UX coherent when no backend is configured
@@ -246,6 +249,20 @@ const SCOREBOARD_KEY = 'quizmaster:scores'
 const SESSION_KEY = 'quizmaster:session'
 const SESSION_VERSION = 3
 
+const ANALYTICS_KEY = 'quizmaster:analyticsHistory'
+type AnalyticsRecord = {
+  totalQuestions: number
+  correctCount: number
+  wrongCount: number
+  skippedCount: number
+  durations: number[]
+  category: CategoryKey | string
+  mode: 'normal' | 'daily' | 'multiplayer'
+  startedAt: number
+  completedAt: number
+  longestCorrectStreak?: number
+}
+
 // Storage helpers to isolate localStorage usage and handle parse errors gracefully
 function readScores(): ScoreEntry[] {
   try {
@@ -311,7 +328,32 @@ function safeReadSession(): SessionSchema | null {
           (typeof (r as Record<string, unknown>).clue === 'string'
             ? String((r as Record<string, unknown>).clue)
             : undefined)
-        return {
+        // PUBLIC_INTERFACE
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function listAnalytics(): AnalyticsRecord[] {
+    /** Returns analytics history. Backfills partial data from scoreboard when necessary. */
+    const analytics = readAnalytics()
+    if (analytics.length) return analytics
+    // backfill from scores (no durations)
+    const scores = readScores()
+    return scores.map((s) => ({
+      totalQuestions: s.total,
+      correctCount: s.score,
+      wrongCount: Math.max(0, s.total - s.score),
+      skippedCount: 0,
+      durations: [],
+      category: s.category,
+      mode:
+        s.meta && typeof s.meta === 'object' && (s.meta as { mode?: string }).mode === 'daily'
+          ? 'daily'
+          : 'normal',
+      startedAt: s.date,
+      completedAt: s.date,
+      longestCorrectStreak: 0,
+    }))
+  }
+
+  return {
           id: (r.id as string | number | undefined) ?? i + 1,
           question: String(r.question),
           options: (r.options as unknown[]).map(String),
@@ -341,9 +383,29 @@ function safeReadSession(): SessionSchema | null {
       fiftyFiftyHidden: (obj as Partial<SessionSchema>).fiftyFiftyHidden ?? {},
       hintShown: (obj as Partial<SessionSchema>).hintShown ?? {},
       timers: (obj as Partial<SessionSchema>).timers ?? {},
+      qStartTs: (obj as Partial<SessionSchema>).qStartTs ?? {},
+      qEndTs: (obj as Partial<SessionSchema>).qEndTs ?? {},
     }
   } catch {
     return null
+  }
+}
+
+function readAnalytics(): AnalyticsRecord[] {
+  try {
+    const raw = localStorage.getItem(ANALYTICS_KEY)
+    if (!raw) return []
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+function writeAnalytics(arr: AnalyticsRecord[]) {
+  try {
+    localStorage.setItem(ANALYTICS_KEY, JSON.stringify(arr.slice(0, 200)))
+  } catch {
+    // ignore
   }
 }
 
@@ -399,8 +461,14 @@ export const useQuizStore = defineStore('quiz', () => {
   const timers = ref<Record<string | number, number | null>>({})
   const timerState = ref<TimerState>({ remaining: null, extraGranted: false })
 
+  // Per-question timing for analytics
+  const qStartTs = ref<Record<string | number, number>>({})
+  const qEndTs = ref<Record<string | number, number>>({})
+
   const total = computed(() => questions.value.length)
   const current = computed(() => questions.value[currentIndex.value] || null)
+
+  // when current question changes, ensure a start timestamp exists
   const progress = computed(() =>
     total.value ? Math.round((currentIndex.value / total.value) * 100) : 0
   )
@@ -414,6 +482,11 @@ export const useQuizStore = defineStore('quiz', () => {
     score.value = 0
     selectedIndex.value = null
     hasSubmitted.value = false
+    // ensure current question has a start timestamp
+    const curId2 = questions.value[currentIndex.value]?.id
+    if (curId2 != null && qStartTs.value[curId2] == null) {
+      qStartTs.value[curId2] = Date.now()
+    }
     error.value = null
     selectedAnswers.value = {}
     startedAt.value = null
@@ -428,6 +501,8 @@ export const useQuizStore = defineStore('quiz', () => {
     hintShown.value = {}
     timers.value = {}
     timerState.value = { remaining: null, extraGranted: false }
+    qStartTs.value = {}
+    qEndTs.value = {}
   }
 
   // PUBLIC_INTERFACE
@@ -529,6 +604,11 @@ export const useQuizStore = defineStore('quiz', () => {
       // initialize session metadata on first load
       if (!startedAt.value) startedAt.value = Date.now()
       updatedAt.value = Date.now()
+      // mark start time for first question
+      const firstId = questions.value[0]?.id
+      if (firstId != null && qStartTs.value[firstId] == null) {
+        qStartTs.value[firstId] = Date.now()
+      }
       persistSession()
     } catch (e: unknown) {
       const msg =
@@ -564,6 +644,8 @@ export const useQuizStore = defineStore('quiz', () => {
     // track per-question selected answer
     const qid = current.value.id
     selectedAnswers.value[qid] = selectedIndex.value
+    // analytics end timestamp for this question
+    if (qEndTs.value[qid] == null) qEndTs.value[qid] = Date.now()
     touchAndPersist()
     return { correct }
   }
@@ -578,6 +660,10 @@ export const useQuizStore = defineStore('quiz', () => {
       // reset timer state for new question (will be started only when extraTime is used)
       const qid = questions.value[currentIndex.value]?.id
       timerState.value = { remaining: (qid != null ? timers.value[qid] ?? null : null), extraGranted: false }
+      // mark start ts for new current
+      if (qid != null && qStartTs.value[qid] == null) {
+        qStartTs.value[qid] = Date.now()
+      }
       touchAndPersist()
       return true
     }
@@ -606,6 +692,8 @@ export const useQuizStore = defineStore('quiz', () => {
       fiftyFiftyHidden: fiftyFiftyHidden.value,
       hintShown: hintShown.value,
       timers: timers.value,
+      qStartTs: qStartTs.value,
+      qEndTs: qEndTs.value,
     }
   }
 
@@ -647,6 +735,8 @@ export const useQuizStore = defineStore('quiz', () => {
     fiftyFiftyHidden.value = saved.fiftyFiftyHidden ?? {}
     hintShown.value = saved.hintShown ?? {}
     timers.value = saved.timers ?? {}
+    qStartTs.value = (saved as unknown as SessionSchema).qStartTs ?? {}
+    qEndTs.value = (saved as unknown as SessionSchema).qEndTs ?? {}
     // set selectedIndex for current if previously answered; otherwise null; ignore 'SKIPPED'
     const curId = questions.value[currentIndex.value]?.id
     const prev = curId != null ? saved.selectedAnswers[curId] : null
@@ -663,6 +753,67 @@ export const useQuizStore = defineStore('quiz', () => {
   }
 
   // Results & Scoreboard
+
+  // Compute analytics record for this session (normal mode)
+  function buildAnalyticsMeta(mode: 'normal' | 'daily' | 'multiplayer' = 'normal'): AnalyticsRecord | null {
+    if (!questions.value.length || startedAt.value == null) return null
+    const totalQ = questions.value.length
+    let correct = 0
+    let wrong = 0
+    let skipped = 0
+    const durations: number[] = []
+    for (let i = 0; i < totalQ; i++) {
+      const q = questions.value[i]
+      const sel = selectedAnswers.value[q.id]
+      if (sel === 'SKIPPED') {
+        skipped += 1
+      } else if (typeof sel === 'number') {
+        if (sel === q.answerIndex) correct += 1
+        else wrong += 1
+      }
+      // duration only if we have both start and end
+      const st = qStartTs.value[q.id]
+      const en = qEndTs.value[q.id]
+      if (typeof st === 'number' && typeof en === 'number' && en >= st) {
+        durations.push(en - st)
+      }
+    }
+    // compute strike
+    const correctFlags: boolean[] = []
+    for (let i = 0; i < totalQ; i++) {
+      const q = questions.value[i]
+      const sel = selectedAnswers.value[q.id]
+      correctFlags.push(typeof sel === 'number' && sel === q.answerIndex)
+    }
+    const longestCorrectStreak = correctFlags.reduce(
+      (best, _, idx, arr) => {
+        let r = 0
+        let local = 0
+        for (let j = 0; j < arr.length; j++) {
+          if (arr[j]) { local += 1; r = Math.max(r, local) } else { local = 0 }
+        }
+        return Math.max(best, r)
+      }, 0)
+
+    return {
+      totalQuestions: totalQ,
+      correctCount: correct,
+      wrongCount: wrong,
+      skippedCount: skipped,
+      durations,
+      category: selectedCategory.value,
+      mode,
+      startedAt: startedAt.value,
+      completedAt: Date.now(),
+      longestCorrectStreak,
+    }
+  }
+
+  function recordAnalytics(meta: AnalyticsRecord | null) {
+    if (!meta) return
+    const existing = readAnalytics()
+    writeAnalytics([meta, ...existing])
+  }
 
   // PUBLIC_INTERFACE
   function addScore(entry: { player?: string | null; score: number; total: number; category: CategoryKey; categoryLabel?: string; meta?: unknown }): void {
@@ -682,6 +833,12 @@ export const useQuizStore = defineStore('quiz', () => {
     }
     const next = [normalized, ...existing].slice(0, 100) // cap to 100 entries
     writeScores(next)
+    // if this is a normal quiz completion, push analytics meta
+    const isDaily = normalized.meta && typeof normalized.meta === 'object' && (normalized.meta as { mode?: string }).mode === 'daily'
+    const isMp = normalized.meta && typeof normalized.meta === 'object' && (normalized.meta as { mode?: string }).mode === 'multiplayer'
+    if (!isDaily && !isMp) {
+      recordAnalytics(buildAnalyticsMeta('normal'))
+    }
   }
 
   // PUBLIC_INTERFACE
@@ -747,6 +904,8 @@ export const useQuizStore = defineStore('quiz', () => {
     if (!cur || lifelines.value.skipUsed) return { ok: false }
     // mark skipped
     selectedAnswers.value[cur.id] = 'SKIPPED'
+    // mark end timestamp for analytics
+    if (qEndTs.value[cur.id] == null) qEndTs.value[cur.id] = Date.now()
     lifelines.value.skipUsed = true
     hasSubmitted.value = true // treat as reviewed for flow
     touchAndPersist()
@@ -826,6 +985,8 @@ export const useQuizStore = defineStore('quiz', () => {
     hintShown,
     timers,
     timerState,
+    qStartTs,
+    qEndTs,
     // derived
     total,
     current,
@@ -858,5 +1019,9 @@ export const useQuizStore = defineStore('quiz', () => {
     resumeIfAvailable,
     resetSession,
     clearSession,
+
+    // analytics
+    listAnalytics,
   }
 })
+// end of quiz store

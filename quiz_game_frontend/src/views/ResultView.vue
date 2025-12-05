@@ -31,6 +31,22 @@ const summary = computed(() => {
   return { total, score, pct }
 })
 
+const quickAvgTime = computed(() => {
+  // approximate average time per answered from current session analytics (if present in store)
+  const ids = quiz.questions.map((q: { id: string | number }) => q.id)
+  const durations: number[] = []
+  for (const id of ids) {
+    const st = quiz.qStartTs[id]
+    const en = quiz.qEndTs[id]
+    if (typeof st === 'number' && typeof en === 'number' && en >= st) {
+      durations.push(en - st)
+    }
+  }
+  if (!durations.length) return null
+  const avg = durations.reduce((a,b)=>a+b,0) / durations.length
+  return Math.round(avg)
+})
+
 const lastRecord = computed(() => {
   const list = quiz.listScores()
   return list.length ? list[0] : null
@@ -111,10 +127,16 @@ function restart() {
         </div>
       </div>
 
+      <div class="quick row" role="status" aria-live="polite">
+        <span class="pill">Accuracy {{ summary.pct }}%</span>
+        <span class="pill" v-if="quickAvgTime != null">Avg {{ (quickAvgTime/1000).toFixed(1) }}s</span>
+      </div>
+
       <div class="buttons">
         <button class="btn btn-primary" @click="restart">Restart</button>
         <button class="btn btn-secondary" @click="$router.push({ name: 'quiz' })">Review</button>
         <button class="btn btn-secondary" @click="$router.push({ name: 'scoreboard' })">View Scoreboard</button>
+        <button class="btn btn-secondary" @click="$router.push({ name: 'analytics' })">View Analytics</button>
       </div>
     </div>
   </section>
@@ -160,6 +182,23 @@ function restart() {
   gap: .75rem;
   justify-content: center;
   margin-top: .5rem;
+}
+.quick.row {
+  display: flex;
+  gap: .5rem;
+  justify-content: center;
+  margin-top: .4rem;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: .15rem .5rem;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: .75rem;
 }
 
 .daily-results {

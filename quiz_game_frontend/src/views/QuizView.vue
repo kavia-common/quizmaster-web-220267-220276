@@ -8,6 +8,16 @@ import QuestionCard from '@/components/QuestionCard.vue'
 const router = useRouter()
 const quiz = useQuizStore()
 
+// Typed category label map to satisfy strict TS indexing
+const categoryMap: Record<'gk'|'sports'|'movies'|'science'|'history'|'geography', string> = {
+  gk: 'General Knowledge',
+  sports: 'Sports',
+  movies: 'Movies',
+  science: 'Science',
+  history: 'History',
+  geography: 'Geography'
+}
+
 let timerInterval: number | undefined
 
 async function ensureHydrated() {
@@ -19,6 +29,11 @@ async function ensureHydrated() {
     await quiz.loadQuestions()
   }
   startTicking()
+  // ensure analytics start timestamp for first visible question
+  const curId = quiz.current?.id
+  if (curId != null && quiz.qStartTs[curId] == null) {
+    quiz.qStartTs[curId] = Date.now()
+  }
 }
 
 function startTicking() {
@@ -121,14 +136,7 @@ onBeforeUnmount(() => {
       :current="quiz.currentIndex"
       :total="quiz.total"
       :score="quiz.score"
-      :category-label="{
-        gk: 'General Knowledge',
-        sports: 'Sports',
-        movies: 'Movies',
-        science: 'Science',
-        history: 'History',
-        geography: 'Geography'
-      }[quiz.selectedCategory]"
+      :category-label="categoryMap[quiz.selectedCategory as 'gk'|'sports'|'movies'|'science'|'history'|'geography']"
       :remaining-seconds="quiz.timerState.remaining ?? null"
     />
 
