@@ -19,6 +19,17 @@ type ScoreEntry = {
   date: number
 }
 
+type SessionSchema = {
+  version: number
+  selectedCategory: CategoryKey
+  questions: QuizQuestion[]
+  currentIndex: number
+  selectedAnswers: Record<string | number, number> // question.id -> selected index
+  score: number
+  startedAt: number
+  updatedAt: number
+}
+
 // Simple sample fallback pools per category to keep UX coherent when no backend is configured
 const fallbackPools: Record<CategoryKey, QuizQuestion[]> = {
   gk: [
@@ -64,6 +75,8 @@ const categoryParamMap: Record<CategoryKey, string> = {
 }
 
 const SCOREBOARD_KEY = 'quizmaster:scores'
+const SESSION_KEY = 'quizmaster:session'
+const SESSION_VERSION = 1
 
 // Storage helpers to isolate localStorage usage and handle parse errors gracefully
 function readScores(): ScoreEntry[] {
@@ -85,6 +98,72 @@ function writeScores(scores: ScoreEntry[]): void {
   }
 }
 
+function safeReadSession(): SessionSchema | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as Partial<SessionSchema> | unknown
+    if (!data || typeof data !== 'object') return null
+    const obj = data as Partial<SessionSchema>
+    if (obj.version !== SESSION_VERSION) return null
+    if (
+      !obj.questions ||
+      !Array.isArray(obj.questions) ||
+      typeof obj.currentIndex !== 'number' ||
+      typeof obj.score !== 'number' ||
+      !obj.selectedCategory ||
+      typeof obj.selectedCategory !== 'string' ||
+      typeof obj.startedAt !== 'number' ||
+      typeof obj.updatedAt !== 'number' ||
+      !obj.selectedAnswers ||
+      typeof obj.selectedAnswers !== 'object'
+    ) {
+      return null
+    }
+    // minimal validation of question schema
+    const qs: QuizQuestion[] = (obj.questions as unknown[])
+      .filter((q: unknown) => {
+        if (!q || typeof q !== 'object') return false
+        const r = q as Record<string, unknown>
+        return typeof r.question === 'string' && Array.isArray(r.options) && typeof r.answerIndex === 'number'
+      })
+      .map((q: unknown, i: number) => {
+        const r = q as Record<string, unknown>
+        return {
+          id: (r.id as string | number | undefined) ?? i + 1,
+          question: String(r.question),
+          options: (r.options as unknown[]).map(String),
+          answerIndex: Number(r.answerIndex),
+        } as QuizQuestion
+      })
+    if (!qs.length) return null
+    return {
+      version: SESSION_VERSION,
+      selectedCategory: obj.selectedCategory as CategoryKey,
+      questions: qs,
+      currentIndex: Math.max(0, Math.min(obj.currentIndex!, qs.length - 1)),
+      selectedAnswers: obj.selectedAnswers as Record<string | number, number>,
+      score: Math.max(0, Number(obj.score)),
+      startedAt: obj.startedAt!,
+      updatedAt: obj.updatedAt!,
+    }
+  } catch {
+    return null
+  }
+}
+
+function safeWriteSession(payload: SessionSchema | null): void {
+  try {
+    if (!payload) {
+      localStorage.removeItem(SESSION_KEY)
+      return
+    }
+    localStorage.setItem(SESSION_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore quota errors
+  }
+}
+
 // PUBLIC_INTERFACE
 export const useQuizStore = defineStore('quiz', () => {
   /**
@@ -101,6 +180,12 @@ export const useQuizStore = defineStore('quiz', () => {
   // Category state
   const selectedCategory = ref<CategoryKey>('gk')
 
+  // session meta
+  const startedAt = ref<number | null>(null)
+  const updatedAt = ref<number | null>(null)
+  // map of selected answers per question id
+  const selectedAnswers = ref<Record<string | number, number>>({})
+
   const total = computed(() => questions.value.length)
   const current = computed(() => questions.value[currentIndex.value] || null)
   const progress = computed(() => (total.value ? Math.round(((currentIndex.value) / total.value) * 100) : 0))
@@ -112,12 +197,17 @@ export const useQuizStore = defineStore('quiz', () => {
     selectedIndex.value = null
     hasSubmitted.value = false
     error.value = null
+    selectedAnswers.value = {}
+    startedAt.value = null
+    updatedAt.value = null
   }
 
   // PUBLIC_INTERFACE
   function resetAll() {
     questions.value = []
     resetRuntime()
+    // also clear any in-progress session
+    clearSession()
   }
 
   // PUBLIC_INTERFACE
@@ -148,6 +238,10 @@ export const useQuizStore = defineStore('quiz', () => {
       if (!url) {
         // No backend configured; use fallback by category
         questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+        // initialize session metadata on first load
+        if (!startedAt.value) startedAt.value = Date.now()
+        updatedAt.value = Date.now()
+        persistSession()
         return
       }
 
@@ -163,30 +257,35 @@ export const useQuizStore = defineStore('quiz', () => {
       // Expect format: [{id, question, options, answerIndex}]
       if (!Array.isArray(data) || !data.length) {
         questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
-        return
-      }
-      // Simple validation/coercion
-      questions.value = (data as unknown[])
-        .filter((q: unknown) => {
-          if (!q || typeof q !== 'object') return false
-          const obj = q as Record<string, unknown>
-          return typeof obj.question === 'string' &&
-                 Array.isArray(obj.options) &&
-                 typeof obj.answerIndex === 'number'
-        })
-        .map((q: unknown, i: number): QuizQuestion => {
-          const obj = q as Record<string, unknown>
-          return {
-            id: (obj.id as string | number | undefined) ?? i + 1,
-            question: String(obj.question),
-            options: (obj.options as unknown[]).map(String),
-            answerIndex: Number(obj.answerIndex),
-          }
-        })
+      } else {
+        // Simple validation/coercion
+        questions.value = (data as unknown[])
+          .filter((q: unknown) => {
+            if (!q || typeof q !== 'object') return false
+            const obj = q as Record<string, unknown>
+            return typeof obj.question === 'string' &&
+                   Array.isArray(obj.options) &&
+                   typeof obj.answerIndex === 'number'
+          })
+          .map((q: unknown, i: number): QuizQuestion => {
+            const obj = q as Record<string, unknown>
+            return {
+              id: (obj.id as string | number | undefined) ?? i + 1,
+              question: String(obj.question),
+              options: (obj.options as unknown[]).map(String),
+              answerIndex: Number(obj.answerIndex),
+            }
+          })
 
-      if (!questions.value.length) {
-        questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+        if (!questions.value.length) {
+          questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+        }
       }
+
+      // initialize session metadata on first load
+      if (!startedAt.value) startedAt.value = Date.now()
+      updatedAt.value = Date.now()
+      persistSession()
     } catch (e: unknown) {
       const msg =
         e && typeof e === 'object' && 'message' in e
@@ -194,6 +293,9 @@ export const useQuizStore = defineStore('quiz', () => {
           : 'Failed to load questions'
       error.value = msg
       questions.value = fallbackPools[selectedCategory.value] ?? fallbackPools.gk
+      if (!startedAt.value) startedAt.value = Date.now()
+      updatedAt.value = Date.now()
+      persistSession()
     } finally {
       loading.value = false
     }
@@ -203,6 +305,8 @@ export const useQuizStore = defineStore('quiz', () => {
   function selectOption(index: number) {
     if (hasSubmitted.value) return
     selectedIndex.value = index
+    // do not mark selectedAnswers until submission; but persist the transient index too
+    touchAndPersist()
   }
 
   // PUBLIC_INTERFACE
@@ -213,6 +317,10 @@ export const useQuizStore = defineStore('quiz', () => {
     hasSubmitted.value = true
     const correct = selectedIndex.value === current.value.answerIndex
     if (correct) score.value += 1
+    // track per-question selected answer
+    const qid = current.value.id
+    selectedAnswers.value[qid] = selectedIndex.value
+    touchAndPersist()
     return { correct }
   }
 
@@ -223,10 +331,74 @@ export const useQuizStore = defineStore('quiz', () => {
       currentIndex.value += 1
       selectedIndex.value = null
       hasSubmitted.value = false
+      touchAndPersist()
       return true
     }
     return false
   }
+
+  // Save & Resume
+
+  function buildSession(): SessionSchema | null {
+    if (!questions.value.length) return null
+    return {
+      version: SESSION_VERSION,
+      selectedCategory: selectedCategory.value,
+      questions: questions.value,
+      currentIndex: currentIndex.value,
+      selectedAnswers: selectedAnswers.value,
+      score: score.value,
+      startedAt: startedAt.value ?? Date.now(),
+      updatedAt: updatedAt.value ?? Date.now(),
+    }
+  }
+
+  function persistSession() {
+    const s = buildSession()
+    safeWriteSession(s)
+  }
+
+  function touchAndPersist() {
+    updatedAt.value = Date.now()
+    persistSession()
+  }
+
+  // PUBLIC_INTERFACE
+  function hasSavedSession(): boolean {
+    return safeReadSession() !== null
+  }
+
+  // PUBLIC_INTERFACE
+  function resetSession() {
+    // clears saved session but also runtime
+    safeWriteSession(null)
+    resetAll()
+  }
+
+  // PUBLIC_INTERFACE
+  async function resumeIfAvailable(): Promise<boolean> {
+    const saved = safeReadSession()
+    if (!saved) return false
+    // hydrate state
+    selectedCategory.value = saved.selectedCategory
+    questions.value = saved.questions
+    currentIndex.value = saved.currentIndex
+    score.value = saved.score
+    selectedAnswers.value = saved.selectedAnswers || {}
+    startedAt.value = saved.startedAt
+    updatedAt.value = saved.updatedAt
+    // set selectedIndex for current if previously answered; otherwise null
+    const curId = questions.value[currentIndex.value]?.id
+    selectedIndex.value = curId != null && saved.selectedAnswers && saved.selectedAnswers[curId] != null
+      ? saved.selectedAnswers[curId]
+      : null
+    hasSubmitted.value = false
+    error.value = null
+    loading.value = false
+    return true
+  }
+
+  // Results & Scoreboard
 
   // PUBLIC_INTERFACE
   function addScore(entry: { player?: string | null; score: number; total: number; category: CategoryKey; categoryLabel?: string }): void {
@@ -263,6 +435,14 @@ export const useQuizStore = defineStore('quiz', () => {
     writeScores([])
   }
 
+  // PUBLIC_INTERFACE
+  function clearSession(): void {
+    /**
+     * Clears in-progress quiz session from localStorage.
+     */
+    safeWriteSession(null)
+  }
+
   return {
     // state
     questions,
@@ -273,6 +453,9 @@ export const useQuizStore = defineStore('quiz', () => {
     loading,
     error,
     selectedCategory,
+    startedAt,
+    updatedAt,
+    selectedAnswers,
     // derived
     total,
     current,
@@ -291,5 +474,11 @@ export const useQuizStore = defineStore('quiz', () => {
     addScore,
     listScores,
     clearScores,
+
+    // session actions
+    hasSavedSession,
+    resumeIfAvailable,
+    resetSession,
+    clearSession,
   }
 })

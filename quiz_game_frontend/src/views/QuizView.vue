@@ -8,7 +8,11 @@ import QuestionCard from '@/components/QuestionCard.vue'
 const router = useRouter()
 const quiz = useQuizStore()
 
-async function ensureQuestions() {
+async function ensureHydrated() {
+  // Try resume/hydrate if saved session exists and questions are empty
+  if (!quiz.questions.length && quiz.hasSavedSession()) {
+    await quiz.resumeIfAvailable()
+  }
   if (!quiz.questions.length && !quiz.loading) {
     await quiz.loadQuestions()
   }
@@ -44,8 +48,17 @@ function handleKey(e: KeyboardEvent) {
   }
 }
 
+function exitQuiz() {
+  if (quiz.hasSavedSession()) {
+    const ok = window.confirm('You have a saved session. Exit and return to start?')
+    if (!ok) return
+  }
+  // keep session so user can resume later
+  router.push({ name: 'start' })
+}
+
 onMounted(() => {
-  ensureQuestions()
+  ensureHydrated()
   window.addEventListener('keydown', handleKey)
 })
 onBeforeUnmount(() => {
@@ -69,6 +82,11 @@ onBeforeUnmount(() => {
       }[quiz.selectedCategory]"
     />
 
+    <div class="save-indicator" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      Progress auto-saved
+    </div>
+
     <div v-if="quiz.loading" class="card loading">
       <p>Loading questions…</p>
     </div>
@@ -88,7 +106,7 @@ onBeforeUnmount(() => {
       <button
         class="btn btn-secondary"
         type="button"
-        @click="$router.push({ name: 'start' })"
+        @click="exitQuiz"
       >
         Exit
       </button>
@@ -126,5 +144,19 @@ onBeforeUnmount(() => {
 }
 .spacer {
   flex: 1;
+}
+.save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .84rem;
+  color: var(--muted);
+  margin-top: -.25rem;
+  margin-left: .25rem;
+}
+.dot {
+  width: .5rem; height: .5rem; border-radius: 50%;
+  background: var(--secondary);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, .18);
 }
 </style>

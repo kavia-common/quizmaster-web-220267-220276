@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useQuizStore, type CategoryKey } from '@/stores/quiz'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const router = useRouter()
 const quiz = useQuizStore()
@@ -17,10 +17,22 @@ const categories: { key: CategoryKey; label: string; emoji: string; hint: string
 ]
 const picked = ref<CategoryKey>(quiz.selectedCategory ?? 'gk')
 
+const hasSession = computed(() => quiz.hasSavedSession())
+const sessionProgress = computed(() => quiz.progress)
+const sessionCategoryLabel = computed(() => ({
+  gk: 'General Knowledge', sports: 'Sports', movies: 'Movies',
+  science: 'Science', history: 'History', geography: 'Geography'
+}[quiz.selectedCategory] || quiz.selectedCategory))
+
 async function start() {
+  if (hasSession.value) {
+    const ok = window.confirm('Starting a new quiz will discard your saved progress. Continue?')
+    if (!ok) return
+    quiz.resetSession()
+  }
   busy.value = true
   loadError.value = null
-  quiz.resetAll()
+  quiz.resetRuntime()
   quiz.setCategory(picked.value)
   await quiz.loadQuestions()
   busy.value = false
@@ -28,6 +40,16 @@ async function start() {
     router.push({ name: 'quiz' })
   } else {
     loadError.value = 'No questions available.'
+  }
+}
+
+async function resume() {
+  const ok = await quiz.resumeIfAvailable()
+  if (ok) {
+    router.push({ name: 'quiz' })
+  } else {
+    // fallback: if resume failed, try normal start with current category
+    await start()
   }
 }
 </script>
@@ -56,16 +78,12 @@ async function start() {
       </div>
 
       <div class="hero-actions">
-        <button class="btn btn-primary" @click="start" :disabled="busy">
-          {{ busy ? 'Preparing…' : 'Start Quiz' }}
+        <button v-if="hasSession" class="btn btn-primary" @click="resume" :disabled="busy">
+          Resume Quiz
+          <span class="badge"> {{ sessionCategoryLabel }} • {{ sessionProgress }}% </span>
         </button>
-        <button
-          class="btn btn-secondary"
-          @click="router.push({ name: 'quiz' })"
-          :disabled="busy"
-          title="Quick start (uses previous questions if loaded)"
-        >
-          Quick Start
+        <button class="btn" :class="hasSession ? 'btn-secondary' : 'btn-primary'" @click="start" :disabled="busy">
+          {{ busy ? 'Preparing…' : (hasSession ? 'Start New Quiz' : 'Start Quiz') }}
         </button>
         <button
           class="btn btn-secondary"
@@ -77,6 +95,11 @@ async function start() {
         </button>
       </div>
       <p v-if="loadError" class="error">{{ loadError }}</p>
+
+      <p class="hint-save" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        Progress auto-saved
+      </p>
     </div>
   </section>
 </template>
@@ -154,8 +177,33 @@ async function start() {
   display: flex;
   gap: .75rem;
   justify-content: center;
+  flex-wrap: wrap;
 }
 .error {
   color: var(--error);
+}
+.badge {
+  margin-left: .5rem;
+  padding: .1rem .5rem;
+  font-size: .75rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+}
+.hint-save {
+  margin-top: .25rem;
+  font-size: .85rem;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+}
+.dot {
+  width: .5rem; height: .5rem; border-radius: 50%;
+  background: var(--secondary);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, .18);
 }
 </style>

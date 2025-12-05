@@ -120,3 +120,18 @@ html, body, #app {
   border-color: var(--error);
   background: #fef2f2;
 }
+
+/* Lightweight toast utility (available if needed) */
+.toast {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid #e5e7eb;
+  color: var(--text);
+  padding: .6rem .8rem;
+  border-radius: .75rem;
+  box-shadow: 0 8px 16px rgba(0,0,0,.08);
+  z-index: 50;
+}

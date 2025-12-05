@@ -1,11 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { Router } from 'vue-router'
+import { useQuizStore } from '@/stores/quiz'
 
 const StartView = () => import('../views/StartView.vue')
 const QuizView = () => import('../views/QuizView.vue')
 const ResultView = () => import('../views/ResultView.vue')
 const ScoreboardView = () => import('../views/ScoreboardView.vue')
 
-const router = createRouter({
+const router: Router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'start', component: StartView },
@@ -14,6 +16,24 @@ const router = createRouter({
     { path: '/scoreboard', name: 'scoreboard', component: ScoreboardView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
+})
+
+// Prompt to resume if navigating directly to /quiz
+router.beforeEach(async (to) => {
+  if (to.name === 'quiz') {
+    // Pinia instance will be attached to app after creation;
+    // in guards it's fine to call store directly
+    const quiz = useQuizStore()
+    if (!quiz.questions.length && quiz.hasSavedSession()) {
+      const resume = window.confirm('We found an in-progress quiz. Would you like to resume?')
+      if (resume) {
+        await quiz.resumeIfAvailable()
+      } else {
+        quiz.resetSession()
+      }
+    }
+  }
+  return true
 })
 
 export default router

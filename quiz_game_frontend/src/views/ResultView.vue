@@ -41,6 +41,10 @@ onMounted(() => {
   } catch {
     // ignore if sessionStorage not available
   }
+  // clear in-progress session once results are recorded to avoid resuming a completed quiz
+  try {
+    quiz.clearSession()
+  } catch {}
 })
 
 function restart() {
