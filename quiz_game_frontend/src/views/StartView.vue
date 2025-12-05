@@ -8,12 +8,14 @@ import { downloadAllCategories, downloadCategoryPack, exportPackToJson, importPa
 import { useCategoryUnlockStore } from '@/stores/categoryUnlocks'
 import { computed as vComputed } from 'vue'
 import { ensureCoinsLoaded, useCoinsStore } from '@/stores/coins'
+import { useUiPreferencesStore } from '@/stores/uiPreferences'
 
 const router = useRouter()
 const quiz = useQuizStore()
 const daily = useDailyQuizStore()
 const offline = useOfflineStore()
 const unlocks = useCategoryUnlockStore()
+const ui = useUiPreferencesStore()
 
 const busy = ref(false)
 const loadError = ref<string | null>(null)
@@ -47,6 +49,11 @@ const sessionCategoryLabel = computed(() => {
 
 const todayKey = computed(() => daily.getPersistentOverview().dailyDate)
 const dailyStreak = computed(() => daily.getPersistentOverview().streakCount)
+
+const autoNext = computed({
+  get: () => ui.autoNextEnabled,
+  set: (v: boolean) => ui.setAutoNext(v),
+})
 
 // Offline helpers
 const offlineEnabled = computed({
@@ -207,6 +214,33 @@ const coinBalance = vComputed(() => coins.getBalance)
       </div>
 
       <span class="sr-only" aria-live="polite">{{ arAnnounce }}</span>
+
+      <!-- Auto next preference -->
+      <div class="offline card" aria-label="Gameplay preferences">
+        <div class="offline-left">
+          <div class="offline-badge" aria-hidden="true">Prefs</div>
+          <div class="offline-info">
+            <div class="offline-title">
+              Auto next (2s)
+              <span class="help" title="Automatically advance to the next question 2 seconds after showing the explanation. Press Escape or focus the Next button to cancel.">ⓘ</span>
+            </div>
+            <div class="offline-sub">
+              When enabled, moves ahead after feedback is shown. Respects countdown and can be canceled by interaction.
+            </div>
+          </div>
+        </div>
+        <div class="offline-right">
+          <label class="switch">
+            <input
+              type="checkbox"
+              :checked="autoNext as unknown as boolean"
+              @change="autoNext = ($event.target as HTMLInputElement).checked"
+              aria-label="Toggle Auto next (2 seconds)"
+            >
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
 
       <!-- Offline mode controls -->
       <div class="offline card">
@@ -512,6 +546,7 @@ const coinBalance = vComputed(() => coins.getBalance)
 }
 .offline-info { display: grid; gap: .1rem; }
 .offline-title { font-weight: 800; color: var(--text); }
+.help { font-size: .8rem; color: var(--muted); margin-left: .35rem; cursor: help; }
 .offline-sub { font-size: .85rem; color: var(--muted); }
 .offline-right { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 

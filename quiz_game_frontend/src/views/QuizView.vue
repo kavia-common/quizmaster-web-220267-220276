@@ -1,13 +1,69 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuizStore } from '@/stores/quiz'
 import QuizHeader from '@/components/QuizHeader.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
 import CountdownOverlay from '@/components/CountdownOverlay.vue'
+import { useUiPreferencesStore } from '@/stores/uiPreferences'
 
 const router = useRouter()
 const quiz = useQuizStore()
+const ui = useUiPreferencesStore()
+const autoAria = ref<string>('') // aria-live polite message
+let autoNextTimer: number | null = null
+const autoCountdown = ref<number | null>(null) // 2..0 seconds indicator
+
+function clearAutoNext() {
+  if (autoNextTimer != null) {
+    clearTimeout(autoNextTimer)
+    autoNextTimer = null
+  }
+  autoCountdown.value = null
+}
+
+function scheduleAutoNext() {
+  // Do not schedule if preference disabled or not in submitted state, or countdown overlay visible
+  if (!ui.autoNextEnabled || !quiz.hasSubmitted || showCountdown.value) return
+  // Avoid double scheduling
+  if (autoNextTimer != null) return
+
+  // Ensure analytics end timestamp is captured already by submitAnswer caller; we are scheduling after hasSubmitted=true.
+  // Start 2-second countdown
+  autoCountdown.value = 2
+  autoAria.value = quiz.isLast ? 'Auto advancing to results in 2 seconds' : 'Auto advancing to next question in 2 seconds'
+
+  // visible countdown tick respecting reduced motion by still updating text without animation
+  const t0 = Date.now()
+  const interval = window.setInterval(() => {
+    if (autoCountdown.value == null) { clearInterval(interval); return }
+    const elapsed = Math.floor((Date.now() - t0) / 1000)
+    const remaining = Math.max(0, 2 - elapsed)
+    autoCountdown.value = remaining
+    if (remaining <= 0) {
+      clearInterval(interval)
+    }
+  }, 250)
+
+  autoNextTimer = window.setTimeout(() => {
+    autoNextTimer = null
+    autoCountdown.value = null
+    // Perform navigation or next
+    if (quiz.hasSubmitted) {
+      if (!quiz.nextQuestion()) {
+        stopTicking()
+        router.push({ name: 'results' })
+      } else {
+        startTicking()
+      }
+    }
+  }, 2000)
+}
+
+// Cancel conditions: manual continue, navigation, resubmit, focusing Next or pressing Escape
+function cancelAutoNext() {
+  clearAutoNext()
+}
 
 // Show countdown if navigated from a fresh start (query flag) and not resuming
 const showCountdown = ref<boolean>(false)
@@ -85,7 +141,36 @@ function onCountdownComplete() {
   router.replace({ query: q })
 }
 
+// Watchers for auto-next behavior
+watch(
+  () => quiz.hasSubmitted,
+  (submitted) => {
+    if (submitted) {
+      // schedule only after explanation is visible and not during countdown overlay
+      if (!showCountdown.value) {
+        // defer to next tick to ensure UI has rendered
+        nextTick(() => scheduleAutoNext())
+      }
+    } else {
+      // entering selection state; cancel any pending auto-advance
+      cancelAutoNext()
+    }
+  }
+)
+watch(
+  () => showCountdown.value,
+  (isShown) => {
+    if (isShown) {
+      // countdown visible; ensure no auto-advance runs
+      cancelAutoNext()
+    }
+  }
+)
+
 function handleSubmitOrNext() {
+  // Any click cancels pending auto advance to prevent double actions
+  cancelAutoNext()
+
   if (quiz.hasSubmitted) {
     if (!quiz.nextQuestion()) {
       stopTicking()
@@ -96,10 +181,17 @@ function handleSubmitOrNext() {
     }
     return
   }
+  // On submit: capture end ts happens in store.submitAnswer(); then schedule auto next if enabled
   quiz.submitAnswer()
+  // Explanation/feedback is shown now; if enabled, schedule
+  scheduleAutoNext()
 }
 
 function handleKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    // allow user to cancel auto advance
+    cancelAutoNext()
+  }
   if (e.key === 'Enter') {
     e.preventDefault()
     // Prevent submission if nothing selected
@@ -160,6 +252,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKey)
   stopTicking()
+  cancelAutoNext()
 })
 </script>
 
@@ -272,14 +365,25 @@ onBeforeUnmount(() => {
         v-else
         class="btn btn-primary"
         @click="handleSubmitOrNext"
+        @focus="cancelAutoNext"
+        :aria-describedby="ui.autoNextEnabled && autoCountdown !== null ? 'auto-next-hint' : undefined"
       >
         {{ quiz.isLast ? 'See Results' : 'Continue' }}
       </button>
+      <span
+        v-if="ui.autoNextEnabled && autoCountdown !== null"
+        id="auto-next-hint"
+        class="auto-indicator"
+        aria-live="polite"
+      >
+        Next in {{ autoCountdown }}…
+      </span>
     </div>
 
     <p v-if="quiz.hasSubmitted" class="read-hint" aria-live="polite">
-      Review the explanation above, then press Continue to proceed.
+      {{ ui.autoNextEnabled ? 'Auto next is enabled. You can cancel by pressing Escape or focusing the Continue button.' : 'Review the explanation above, then press Continue to proceed.' }}
     </p>
+    <span class="sr-only" aria-live="polite">{{ autoAria }}</span>
   </div>
 </template>
 
@@ -313,6 +417,19 @@ onBeforeUnmount(() => {
   color: var(--muted);
   font-size: .9rem;
   margin-left: .25rem;
+}
+.auto-indicator {
+  margin-left: .5rem;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap; border: 0;
 }
 
 /* Lifelines styling matching Ocean Professional theme */

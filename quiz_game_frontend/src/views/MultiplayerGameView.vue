@@ -40,6 +40,7 @@ function selectOption(idx: number) {
 }
 
 function continueOrFinish() {
+  // In multiplayer, do not auto-advance via local preference; host controls flow.
   if (!mp.nextQuestion()) {
     // done
     router.push({ name: 'mp-lobby' })

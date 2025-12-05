@@ -1,15 +1,56 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDailyQuizStore } from '@/stores/dailyQuiz'
 import { useQuizStore } from '@/stores/quiz'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizHeader from '@/components/QuizHeader.vue'
 import CountdownOverlay from '@/components/CountdownOverlay.vue'
+import { useUiPreferencesStore } from '@/stores/uiPreferences'
 
 const router = useRouter()
 const daily = useDailyQuizStore()
 const quiz = useQuizStore() // for addScore function reuse
+const ui = useUiPreferencesStore()
+const autoAria = ref<string>('') // aria-live polite message
+let autoNextTimer: number | null = null
+const autoCountdown = ref<number | null>(null)
+
+function clearAutoNext() {
+  if (autoNextTimer != null) {
+    clearTimeout(autoNextTimer)
+    autoNextTimer = null
+  }
+  autoCountdown.value = null
+}
+function cancelAutoNext() {
+  clearAutoNext()
+}
+function scheduleAutoNext() {
+  if (!ui.autoNextEnabled || !daily.hasSubmitted || showCountdown.value) return
+  if (autoNextTimer != null) return
+  autoCountdown.value = 2
+  autoAria.value = daily.isLast ? 'Auto advancing to results in 2 seconds' : 'Auto advancing to next question in 2 seconds'
+  const t0 = Date.now()
+  const interval = window.setInterval(() => {
+    if (autoCountdown.value == null) { clearInterval(interval); return }
+    const elapsed = Math.floor((Date.now() - t0) / 1000)
+    const remaining = Math.max(0, 2 - elapsed)
+    autoCountdown.value = remaining
+    if (remaining <= 0) clearInterval(interval)
+  }, 250)
+  autoNextTimer = window.setTimeout(() => {
+    autoNextTimer = null
+    autoCountdown.value = null
+    if (daily.hasSubmitted) {
+      if (!daily.nextQuestion()) {
+        // complete and go results (same as manual path)
+        daily.completeAndRecordScore(quiz.addScore)
+        router.push({ name: 'results' })
+      }
+    }
+  }, 2000)
+}
 
 const showCountdown = ref<boolean>(false)
 const isFreshSession = computed(() => {
@@ -55,6 +96,7 @@ function handleSubmitOrNext() {
     return
   }
   daily.submitAnswer()
+  scheduleAutoNext()
 }
 
 function exitDaily() {
@@ -71,6 +113,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (sparkleTimer) clearTimeout(sparkleTimer)
+  cancelAutoNext()
 })
 
 /**
@@ -79,6 +122,24 @@ onBeforeUnmount(() => {
 function onCountdownComplete() {
   showCountdown.value = false
 }
+
+// Auto-next watchers
+watch(
+  () => daily.hasSubmitted,
+  (submitted) => {
+    if (submitted && !showCountdown.value) {
+      nextTick(() => scheduleAutoNext())
+    } else {
+      cancelAutoNext()
+    }
+  }
+)
+watch(
+  () => showCountdown.value,
+  (shown) => {
+    if (shown) cancelAutoNext()
+  }
+)
 </script>
 
 <template>
@@ -169,10 +230,22 @@ function onCountdownComplete() {
         v-else
         class="btn btn-primary"
         @click="handleSubmitOrNext"
+        @focus="cancelAutoNext"
+        :aria-describedby="ui.autoNextEnabled && autoCountdown !== null ? 'daily-auto-next' : undefined"
       >
         {{ daily.isLast ? 'See Daily Results' : 'Continue' }}
       </button>
+      <span
+        v-if="ui.autoNextEnabled && autoCountdown !== null"
+        id="daily-auto-next"
+        class="auto-indicator"
+        aria-live="polite"
+      >
+        Next in {{ autoCountdown }}…
+      </span>
     </div>
+
+    <span class="sr-only" aria-live="polite">{{ autoAria }}</span>
 
     <transition name="pop">
       <div v-if="showConfetti" class="celebrate" role="status" aria-live="assertive">
@@ -185,6 +258,8 @@ function onCountdownComplete() {
 <style scoped>
 .loading { padding: 1rem; }
 .actions { display: flex; align-items: center; gap: .75rem; }
+.auto-indicator { margin-left: .5rem; color: var(--muted); font-size: .9rem; }
+.sr-only { position: absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip: rect(0,0,0,0); white-space:nowrap; border:0; }
 .spacer { flex: 1; }
 .save-indicator { display: inline-flex; align-items: center; gap: .4rem; font-size: .84rem; color: var(--muted); margin-top: -.25rem; margin-left: .25rem; }
 .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--secondary); box-shadow: 0 0 0 3px rgba(245, 158, 11, .18); }
