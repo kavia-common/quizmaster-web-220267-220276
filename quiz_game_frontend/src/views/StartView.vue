@@ -93,6 +93,15 @@ async function resume() {
         >
           View Scoreboard
         </button>
+        <button
+          class="btn btn-secondary"
+          @click="router.push({ name: 'mp-lobby' })"
+          :disabled="busy"
+          title="Play with friends (optional)"
+          aria-label="Multiplayer lobby"
+        >
+          Multiplayer
+        </button>
       </div>
       <p v-if="loadError" class="error">{{ loadError }}</p>
 
