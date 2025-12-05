@@ -61,6 +61,14 @@ html, body, #app {
   cursor: not-allowed;
 }
 
+.btn-danger {
+  background: var(--error);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 4px rgba(239,68,68,.15);
+}
+.btn-danger:hover { filter: brightness(0.95); }
+
 /* Cards */
 .card {
   background: var(--surface);

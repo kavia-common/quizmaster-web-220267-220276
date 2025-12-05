@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuizStore } from '@/stores/quiz'
 
 const router = useRouter()
 const quiz = useQuizStore()
+
+const categoryLabels: Record<string, string> = {
+  gk: 'General Knowledge',
+  sports: 'Sports',
+  movies: 'Movies',
+  science: 'Science',
+  history: 'History',
+  geography: 'Geography',
+}
 
 const summary = computed(() => {
   const total = quiz.total
@@ -13,7 +22,30 @@ const summary = computed(() => {
   return { total, score, pct }
 })
 
+onMounted(() => {
+  // Save score once when arriving on results screen
+  // Ask for a quick name/initials prompt; fallback to Anonymous
+  try {
+    const storedOnce = (sessionStorage.getItem('results:saved') || '0') === '1'
+    if (!storedOnce && summary.value.total > 0) {
+      const input = window.prompt('Enter your name/initials to save your score (optional):', '')
+      quiz.addScore({
+        player: input ?? '',
+        score: summary.value.score,
+        total: summary.value.total,
+        category: quiz.selectedCategory,
+        categoryLabel: categoryLabels[quiz.selectedCategory] || quiz.selectedCategory,
+      })
+      sessionStorage.setItem('results:saved', '1')
+    }
+  } catch {
+    // ignore if sessionStorage not available
+  }
+})
+
 function restart() {
+  // clear the session flag so next completion saves again
+  try { sessionStorage.removeItem('results:saved') } catch {}
   quiz.resetAll()
   router.push({ name: 'start' })
 }
@@ -32,6 +64,7 @@ function restart() {
       <div class="buttons">
         <button class="btn btn-primary" @click="restart">Restart</button>
         <button class="btn btn-secondary" @click="$router.push({ name: 'quiz' })">Review</button>
+        <button class="btn btn-secondary" @click="$router.push({ name: 'scoreboard' })">View Scoreboard</button>
       </div>
     </div>
   </section>

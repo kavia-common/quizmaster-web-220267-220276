@@ -10,6 +10,15 @@ export type QuizQuestion = {
 
 export type CategoryKey = 'gk' | 'sports' | 'movies' | 'science' | 'history' | 'geography'
 
+type ScoreEntry = {
+  player: string
+  score: number
+  total: number
+  category: CategoryKey
+  categoryLabel?: string
+  date: number
+}
+
 // Simple sample fallback pools per category to keep UX coherent when no backend is configured
 const fallbackPools: Record<CategoryKey, QuizQuestion[]> = {
   gk: [
@@ -52,6 +61,28 @@ const categoryParamMap: Record<CategoryKey, string> = {
   science: 'science',
   history: 'history',
   geography: 'geography',
+}
+
+const SCOREBOARD_KEY = 'quizmaster:scores'
+
+// Storage helpers to isolate localStorage usage and handle parse errors gracefully
+function readScores(): ScoreEntry[] {
+  try {
+    const raw = localStorage.getItem(SCOREBOARD_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeScores(scores: ScoreEntry[]): void {
+  try {
+    localStorage.setItem(SCOREBOARD_KEY, JSON.stringify(scores))
+  } catch {
+    // ignore storage quota errors
+  }
 }
 
 // PUBLIC_INTERFACE
@@ -197,6 +228,41 @@ export const useQuizStore = defineStore('quiz', () => {
     return false
   }
 
+  // PUBLIC_INTERFACE
+  function addScore(entry: { player?: string | null; score: number; total: number; category: CategoryKey; categoryLabel?: string }): void {
+    /**
+     * Add a score to persistent storage (localStorage). Stores latest at the top.
+     * Omits player name if not provided.
+     */
+    const existing = readScores()
+    const normalized: ScoreEntry = {
+      player: (entry.player ?? '').toString().trim().slice(0, 16) || 'Anonymous',
+      score: Number(entry.score) || 0,
+      total: Number(entry.total) || 0,
+      category: entry.category,
+      categoryLabel: entry.categoryLabel,
+      date: Date.now(),
+    }
+    const next = [normalized, ...existing].slice(0, 100) // cap to 100 entries
+    writeScores(next)
+  }
+
+  // PUBLIC_INTERFACE
+  function listScores(): ScoreEntry[] {
+    /**
+     * Returns saved scores sorted by most recent first.
+     */
+    return readScores()
+  }
+
+  // PUBLIC_INTERFACE
+  function clearScores(): void {
+    /**
+     * Clears all saved scores from localStorage.
+     */
+    writeScores([])
+  }
+
   return {
     // state
     questions,
@@ -220,5 +286,10 @@ export const useQuizStore = defineStore('quiz', () => {
     nextQuestion,
     resetRuntime,
     setCategory,
+
+    // scoreboard actions
+    addScore,
+    listScores,
+    clearScores,
   }
 })

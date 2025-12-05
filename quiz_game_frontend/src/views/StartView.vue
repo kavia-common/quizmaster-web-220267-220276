@@ -67,6 +67,14 @@ async function start() {
         >
           Quick Start
         </button>
+        <button
+          class="btn btn-secondary"
+          @click="router.push({ name: 'scoreboard' })"
+          :disabled="busy"
+          title="View saved scores"
+        >
+          View Scoreboard
+        </button>
       </div>
       <p v-if="loadError" class="error">{{ loadError }}</p>
     </div>
