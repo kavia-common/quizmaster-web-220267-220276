@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMultiplayerStore } from '@/stores/multiplayer'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizHeader from '@/components/QuizHeader.vue'
+import CountdownOverlay from '@/components/CountdownOverlay.vue'
 
 const router = useRouter()
 const mp = useMultiplayerStore()
+
+const showCountdown = ref(false)
 
 const roomCode = computed(() => mp.state.roomCode)
 const isHost = computed(() => mp.state.isHost)
@@ -37,6 +40,15 @@ function continueOrFinish() {
 function exitToLobby() {
   router.push({ name: 'mp-lobby' })
 }
+function hostStartFlow() {
+  // Host triggers a pre-start countdown locally (and ideally informs others via WS START after)
+  if (!isHost.value) return
+  // Only show countdown if game not yet started
+  if (!mp.state.questions.length) {
+    showCountdown.value = true
+  }
+}
+
 </script>
 
 <template>
@@ -86,18 +98,52 @@ function exitToLobby() {
     <div class="actions">
       <button class="btn btn-secondary" @click="exitToLobby">Exit</button>
       <div class="spacer"></div>
-      <button
-        class="btn btn-primary"
-        v-if="isHost"
-        :disabled="currentIndex + 1 >= total"
-        @click="continueOrFinish"
-      >
-        Next
-      </button>
+
+      <!-- Host controls -->
+      <template v-if="isHost">
+        <button
+          v-if="!currentQ"
+          class="btn btn-primary"
+          @click="hostStartFlow"
+          :disabled="!!currentQ"
+          title="Start the game"
+        >
+          Start
+        </button>
+        <button
+          v-else
+          class="btn btn-primary"
+          :disabled="currentIndex + 1 >= total"
+          @click="continueOrFinish"
+        >
+          Next
+        </button>
+      </template>
+
+      <!-- Non-hosts wait -->
       <button class="btn btn-primary" v-else disabled title="Host controls the flow">
         Waiting for Host…
       </button>
     </div>
+
+    <!-- Countdown overlay for host pre-start; on complete, broadcast start (or local demo) -->
+    <CountdownOverlay
+      v-if="showCountdown && isHost && !currentQ"
+      @complete="
+        () => {
+          showCountdown = false
+          // If backend exists, store logic already sends START in hostStart();
+          // here, for both modes, we call hostStart to initialize questions and START.
+          // Using a dedicated method on the store:
+          if (mp.hasBackend) {
+            // reuse existing hostStart method which sets seed and START message
+            mp.hostStart(mp.state.category || 'gk')
+          } else {
+            mp.hostStart(mp.state.category || 'gk')
+          }
+        }
+      "
+    />
 
     <aside class="leader card" aria-label="Leaderboard">
       <h3 class="leader-title">Leaderboard</h3>

@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuizStore } from '@/stores/quiz'
 import QuizHeader from '@/components/QuizHeader.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
+import CountdownOverlay from '@/components/CountdownOverlay.vue'
 
 const router = useRouter()
 const quiz = useQuizStore()
+
+// Show countdown if navigated from a fresh start (query flag) and not resuming
+const showCountdown = ref(false)
+const isFreshSession = computed(() => {
+  const q = router.currentRoute.value.query
+  return q && q.startWithCountdown === '1'
+})
 
 // Typed category label map to satisfy strict TS indexing
 const categoryMap: Record<'gk'|'sports'|'movies'|'science'|'history'|'geography', string> = {
@@ -28,11 +36,16 @@ async function ensureHydrated() {
   if (!quiz.questions.length && !quiz.loading) {
     await quiz.loadQuestions()
   }
-  startTicking()
-  // ensure analytics start timestamp for first visible question
-  const curId = quiz.current?.id
-  if (curId != null && quiz.qStartTs[curId] == null) {
-    quiz.qStartTs[curId] = Date.now()
+
+  // If this is a fresh start with countdown, delay ticking and qStartTs until overlay completes
+  const shouldCountdown = isFreshSession.value && !quiz.hasSavedSession()
+  showCountdown.value = !!shouldCountdown
+  if (!shouldCountdown) {
+    startTicking()
+    const curId = quiz.current?.id
+    if (curId != null && quiz.qStartTs[curId] == null) {
+      quiz.qStartTs[curId] = Date.now()
+    }
   }
 }
 
@@ -158,6 +171,25 @@ onBeforeUnmount(() => {
       :selected-index="quiz.selectedIndex"
       :has-submitted="quiz.hasSubmitted"
       @select="quiz.selectOption"
+    />
+
+    <CountdownOverlay
+      v-if="showCountdown"
+      @complete="
+        () => {
+          // start timers and stamp question visible moment
+          const curId = quiz.current?.id
+          if (curId != null && quiz.qStartTs[curId] == null) {
+            quiz.qStartTs[curId] = Date.now()
+          }
+          startTicking()
+          showCountdown = false
+          // remove the query flag to avoid repeated countdown on navigation
+          const q = { ...$router.currentRoute.value.query }
+          delete q.startWithCountdown
+          $router.replace({ query: q })
+        }
+      "
     />
 
     <!-- Lifelines -->

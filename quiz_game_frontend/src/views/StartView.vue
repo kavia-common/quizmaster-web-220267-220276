@@ -145,7 +145,7 @@ async function start() {
   await quiz.loadQuestions()
   busy.value = false
   if (quiz.questions.length) {
-    router.push({ name: 'quiz' })
+    router.push({ name: 'quiz', query: { startWithCountdown: '1' } })
   } else {
     loadError.value = 'No questions available.'
   }
@@ -170,7 +170,7 @@ async function startDaily() {
   await daily.prepareToday(null, 10)
   busy.value = false
   if (!daily.error && daily.questions.length) {
-    router.push({ name: 'daily' })
+    router.push({ name: 'daily', query: { startWithCountdown: '1' } })
   }
 }
 

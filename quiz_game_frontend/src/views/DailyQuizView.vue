@@ -1,22 +1,41 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDailyQuizStore } from '@/stores/dailyQuiz'
 import { useQuizStore } from '@/stores/quiz'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizHeader from '@/components/QuizHeader.vue'
+import CountdownOverlay from '@/components/CountdownOverlay.vue'
 
 const router = useRouter()
 const daily = useDailyQuizStore()
 const quiz = useQuizStore() // for addScore function reuse
+
+const showCountdown = ref(false)
+const isFreshSession = computed(() => {
+  const q = router.currentRoute.value.query
+  return q && q.startWithCountdown === '1'
+})
 
 let sparkleTimer: number | undefined
 const showConfetti = ref(false)
 
 async function ensureDaily() {
   // Resume first if possible; else prepare
-  if (!(await daily.resumeIfAvailable())) {
+  const resumed = await daily.resumeIfAvailable()
+  if (!resumed) {
     await daily.prepareToday(null, 10)
+    // show countdown only for fresh daily start (not resume)
+    const shouldCountdown = isFreshSession.value
+    showCountdown.value = !!shouldCountdown
+    // remove the flag immediately from URL to avoid later re-use
+    if (shouldCountdown) {
+      const q = { ...router.currentRoute.value.query }
+      delete q.startWithCountdown
+      router.replace({ query: q })
+    }
+  } else {
+    showCountdown.value = false
   }
 }
 
@@ -83,6 +102,11 @@ onBeforeUnmount(() => {
       :selected-index="daily.selectedIndex"
       :has-submitted="daily.hasSubmitted"
       @select="daily.selectOption"
+    />
+
+    <CountdownOverlay
+      v-if="showCountdown"
+      @complete="() => { showCountdown = false }"
     />
 
     <div class="lifelines card" role="group" aria-label="Daily Lifelines">
