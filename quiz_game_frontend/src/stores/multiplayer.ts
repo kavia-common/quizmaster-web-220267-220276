@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { ensureCoinsLoaded, useCoinsStore, COIN_RULES, CoinIds } from './coins'
 import { computed, ref, watch } from 'vue'
 import type { CategoryKey, QuizQuestion } from './quiz'
 
@@ -272,6 +273,45 @@ export const useMultiplayerStore = defineStore('multiplayer', () => {
   // PUBLIC_INTERFACE
   function nextQuestion(): boolean {
     /** Host or local flow: advance to next question index and reset per-question start timestamp. */
+    // Award coins for current question winners/participants prior to advancing
+    try {
+      const room = state.value.roomCode || 'LOCAL'
+      const round = state.value.currentQuestionIndex
+      const subs = state.value.submissions.filter(s => s.questionIndex === round)
+      if (subs.length) {
+        const correctSubs = subs.filter(s => s.correct)
+        if (correctSubs.length) {
+          const firstTs = Math.min(...correctSubs.map(s => s.ts))
+          const winners = correctSubs.filter(s => s.ts === firstTs).map(s => s.playerId)
+          ensureCoinsLoaded()
+          const coins = useCoinsStore()
+          // winners
+          for (const uid of winners) {
+            const id = CoinIds.multiplayerWin(room, round, uid)
+            coins.add(COIN_RULES.MULTIPLAYER_WIN, 'challenge-win', id, { roomCode: room, round, userId: uid })
+          }
+          // participants
+          if (COIN_RULES.PARTICIPATION > 0) {
+            const others = Array.from(new Set(subs.map(s => s.playerId))).filter(uid => !winners.includes(uid))
+            for (const uid of others) {
+              const id = CoinIds.multiplayerParticipation(room, round, uid)
+              coins.add(COIN_RULES.PARTICIPATION, 'bonus', id, { roomCode: room, round, userId: uid })
+            }
+          }
+        } else if (COIN_RULES.PARTICIPATION > 0) {
+          // no one answered correctly: optionally grant participation to all who attempted
+          ensureCoinsLoaded()
+          const coins = useCoinsStore()
+          const all = Array.from(new Set(subs.map(s => s.playerId)))
+          for (const uid of all) {
+            const id = CoinIds.multiplayerParticipation(room, round, uid)
+            coins.add(COIN_RULES.PARTICIPATION, 'bonus', id, { roomCode: room, round, userId: uid })
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('coin award failed (multiplayer nextQuestion):', e)
+    }
     const nextIndex = state.value.currentQuestionIndex + 1
     if (nextIndex >= state.value.questions.length) return false
     state.value.currentQuestionIndex = nextIndex

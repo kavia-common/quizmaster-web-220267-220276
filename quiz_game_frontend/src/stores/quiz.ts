@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { ensureCoinsLoaded, useCoinsStore, COIN_RULES, CoinIds } from './coins'
 
 export type QuizQuestion = {
   id: string | number
@@ -441,6 +442,17 @@ export const useQuizStore = defineStore('quiz', () => {
 
   // session meta
   const startedAt = ref<number | null>(null)
+  // session identifier for idempotency of coin awards
+  function genSessionId(): string {
+    try {
+      const bytes = new Uint8Array(8)
+      crypto.getRandomValues(bytes)
+      return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+    } catch {
+      return Math.random().toString(36).slice(2, 10)
+    }
+  }
+  const sessionId = ref<string>(genSessionId())
   const updatedAt = ref<number | null>(null)
   // map of selected answers per question id
   const selectedAnswers = ref<Record<string | number, number | 'SKIPPED'>>({})
@@ -669,6 +681,38 @@ export const useQuizStore = defineStore('quiz', () => {
     selectedAnswers.value[qid] = selectedIndex.value
     // analytics end timestamp for this question
     if (qEndTs.value[qid] == null) qEndTs.value[qid] = Date.now()
+
+    // Award coins for correct answers with idempotency per session + questionIndex
+    try {
+      if (correct) {
+        ensureCoinsLoaded()
+        const coins = useCoinsStore()
+        const id = CoinIds.correctAnswer(String(sessionId), currentIndex.value)
+        coins.add(COIN_RULES.CORRECT_ANSWER, 'correct-answer', id, {
+          sessionId: String(sessionId),
+          q: currentIndex.value,
+        })
+      }
+    } catch (e) {
+      console.warn('coin award failed (correct-answer):', e)
+    }
+
+    // If this was the last question, mark finished and award quiz-complete
+    if (currentIndex.value >= total.value - 1) {
+      try {
+        ensureCoinsLoaded()
+        const coins = useCoinsStore()
+        const id = CoinIds.quizComplete(String(sessionId))
+        coins.add(COIN_RULES.QUIZ_COMPLETE, 'quiz-complete', id, {
+          sessionId: String(sessionId),
+          total: total.value,
+          score: score.value,
+        })
+      } catch (e) {
+        console.warn('coin award failed (quiz-complete):', e)
+      }
+    }
+
     touchAndPersist()
     return { correct }
   }
@@ -1010,6 +1054,8 @@ export const useQuizStore = defineStore('quiz', () => {
     timerState,
     qStartTs,
     qEndTs,
+    // meta
+    sessionId,
     // derived
     total,
     current,

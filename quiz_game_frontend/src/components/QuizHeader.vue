@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ensureCoinsLoaded, useCoinsStore } from '@/stores/coins'
 
 const props = defineProps<{
   current: number
@@ -14,6 +15,25 @@ const pct = computed(() => {
   if (!props.total) return 0
   return Math.round(((props.current) / props.total) * 100)
 })
+
+// coins badge
+const coins = useCoinsStore()
+const balance = computed(() => coins.getBalance)
+const recentDelta = ref(0)
+onMounted(() => {
+  ensureCoinsLoaded()
+})
+watch(
+  () => coins.getHistory(1),
+  (items) => {
+    if (items && items.length > 0) {
+      const latest = items[0]
+      recentDelta.value = latest.delta
+      window.setTimeout(() => (recentDelta.value = 0), 1200)
+    }
+  },
+  { deep: true }
+)
 </script>
 
 <template>
@@ -34,6 +54,28 @@ const pct = computed(() => {
         <div v-if="props.remainingSeconds != null" class="timer" role="timer" :aria-label="`Time remaining ${props.remainingSeconds} seconds`">
           ⏱️ <span class="timer-val">{{ props.remainingSeconds }}s</span>
         </div>
+      </div>
+      <div
+        class="coin-badge"
+        :aria-label="`Coin balance: ${balance}`"
+        role="status"
+      >
+        <svg class="coin-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <defs>
+            <linearGradient id="coinGrad" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stop-color="#F59E0B" />
+              <stop offset="100%" stop-color="#D97706" />
+            </linearGradient>
+          </defs>
+          <circle cx="12" cy="12" r="10" fill="url(#coinGrad)" />
+          <text x="12" y="16" text-anchor="middle" font-size="12" fill="#fff" font-weight="700">$</text>
+        </svg>
+        <span class="coin-balance">{{ balance }}</span>
+        <transition name="pulse" appear>
+          <span v-if="recentDelta !== 0" class="delta" :class="{ up: recentDelta>0, down: recentDelta<0 }">
+            {{ recentDelta>0 ? `+${recentDelta}` : `${recentDelta}` }}
+          </span>
+        </transition>
       </div>
     </div>
   </div>
@@ -93,5 +135,36 @@ const pct = computed(() => {
   font-weight: 800;
   color: var(--primary);
   font-size: 1.25rem;
+}
+.coin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #F9FAFB, #EFF6FF);
+  border: 1px solid rgba(37,99,235,0.15);
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #111827;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+}
+.coin-icon { width: 20px; height: 20px; display: block; }
+.coin-balance { font-weight: 700; color: #2563EB; }
+.delta {
+  margin-left: 2px;
+  font-weight: 700;
+  color: #F59E0B;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,0.08));
+}
+.delta.down { color: #EF4444; }
+@media (prefers-reduced-motion: no-preference) {
+  .pulse-enter-active,
+  .pulse-leave-active {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .pulse-enter-from,
+  .pulse-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 </style>

@@ -5,6 +5,7 @@ import { useMultiplayerStore } from '@/stores/multiplayer'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizHeader from '@/components/QuizHeader.vue'
 import CountdownOverlay from '@/components/CountdownOverlay.vue'
+import { COIN_RULES } from '@/stores/coins'
 
 const router = useRouter()
 const mp = useMultiplayerStore()
@@ -14,6 +15,14 @@ const showCountdown = ref(false)
 const roomCode = computed(() => mp.state.roomCode)
 const isHost = computed(() => mp.state.isHost)
 const players = computed(() => mp.leaderboard)
+const winAward = COIN_RULES.MULTIPLAYER_WIN
+const participationAward = COIN_RULES.PARTICIPATION
+const winnerIds = computed<Set<string>>(() => {
+  const board = players.value
+  if (!board || board.length === 0) return new Set<string>()
+  const top = Math.max(...board.map(b => b.score))
+  return new Set(board.filter(b => b.score === top).map(b => b.id))
+})
 const currentIndex = computed(() => mp.state.currentQuestionIndex)
 const currentQ = computed(() => mp.state.questions[currentIndex.value] || null)
 const total = computed(() => mp.state.questions.length)
@@ -152,6 +161,8 @@ function hostStartFlow() {
           <span class="avatar" aria-hidden="true">{{ (p.name || '??').slice(0,2).toUpperCase() }}</span>
           <span class="name">{{ p.name }}</span>
           <span class="score">{{ p.score }}</span>
+          <span v-if="winnerIds.has(p.id)" class="award">+{{ winAward }} coins</span>
+          <span v-else-if="participationAward>0" class="award secondary">+{{ participationAward }} coins</span>
         </li>
       </ul>
       <p v-if="!mp.hasBackend" class="demo-note">
@@ -187,5 +198,7 @@ function hostStartFlow() {
 }
 .name { font-weight: 700; }
 .score { font-weight: 800; color: var(--primary); }
+.award { margin-left: .5rem; color: #F59E0B; font-weight: 700; }
+.award.secondary { color: #2563EB; }
 .demo-note { color: var(--muted); font-size: .85rem; margin-top: .5rem; }
 </style>

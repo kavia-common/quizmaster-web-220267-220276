@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { ensureCoinsLoaded, useCoinsStore, COIN_RULES, CoinIds } from './coins'
 import { ref, computed } from 'vue'
 import type { QuizQuestion, CategoryKey } from '@/stores/quiz'
 import pools from '@/utils/pools'
@@ -478,6 +479,18 @@ export const useDailyQuizStore = defineStore('dailyQuiz', () => {
       categoryLabel: catLabelMap[dailyCategory.value ?? 'gk'] ?? (dailyCategory.value ?? 'Daily'),
       meta: metaRecord,
     })
+
+    // Award daily-complete coins (idempotent per date)
+    try {
+      ensureCoinsLoaded()
+      const coins = useCoinsStore()
+      const id = CoinIds.dailyComplete(String(today))
+      coins.add(COIN_RULES.DAILY_COMPLETE, 'daily-complete', id, {
+        dailyId: String(today),
+      })
+    } catch (e) {
+      console.warn('coin award failed (daily-complete):', e)
+    }
 
     // clear session for today to prevent duplicate completion increment
     clearSession()

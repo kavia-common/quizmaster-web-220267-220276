@@ -6,6 +6,8 @@ import { useDailyQuizStore } from '@/stores/dailyQuiz'
 import { useOfflineStore } from '@/stores/offline'
 import { downloadAllCategories, downloadCategoryPack, exportPackToJson, importPackFromJson } from '@/utils/offlineService'
 import { useCategoryUnlockStore } from '@/stores/categoryUnlocks'
+import { computed as vComputed } from 'vue'
+import { ensureCoinsLoaded, useCoinsStore } from '@/stores/coins'
 
 const router = useRouter()
 const quiz = useQuizStore()
@@ -187,6 +189,11 @@ onMounted(() => {
   unlocks.loadUnlocks()
   arAnnounce.value = `Daily quiz for ${todayKey.value}. Current streak ${dailyStreak.value} days.`
 })
+
+// coins
+const coins = useCoinsStore()
+ensureCoinsLoaded()
+const coinBalance = vComputed(() => coins.getBalance)
 </script>
 
 <template>
@@ -194,6 +201,10 @@ onMounted(() => {
     <div class="hero-inner">
       <h2 class="hero-title">Welcome to QuizMaster</h2>
       <p class="hero-sub">Choose a category to begin your journey.</p>
+      <div class="balance-pill" :aria-label="`Current coin balance: ${coinBalance}`" role="status">
+        <span class="dot" />
+        <span class="text">{{ coinBalance }} coins</span>
+      </div>
 
       <span class="sr-only" aria-live="polite">{{ arAnnounce }}</span>
 
@@ -381,6 +392,27 @@ onMounted(() => {
 }
 .hero-sub {
   color: var(--muted);
+}
+.balance-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #111827;
+  margin: 0.25rem auto 0;
+}
+.balance-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #F59E0B;
+  box-shadow: 0 0 0 2px rgba(245,158,11,0.2);
+}
+.balance-pill .text {
+  font-weight: 600;
 }
 
 .grid {

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuizStore } from '@/stores/quiz'
+import { ensureCoinsLoaded, useCoinsStore } from '@/stores/coins'
 import { useCategoryUnlockStore } from '@/stores/categoryUnlocks'
 
 type DailyMetaRecord = {
@@ -29,6 +30,21 @@ const summary = computed(() => {
   const score = quiz.score
   const pct = total ? Math.round((score / total) * 100) : 0
   return { total, score, pct }
+})
+
+// Coins integration
+const coins = useCoinsStore()
+ensureCoinsLoaded()
+const balance = computed(() => coins.getBalance)
+const earnedThisQuiz = computed(() => {
+  const sid = typeof (quiz as { sessionId?: unknown }).sessionId === 'string'
+    ? (quiz as { sessionId?: string }).sessionId as string
+    : ''
+  if (!sid) return 0
+  const history = coins.getHistory()
+  return history
+    .filter(h => (h.meta?.sessionId ?? '') === sid && h.delta > 0)
+    .reduce((sum, h) => sum + h.delta, 0)
 })
 
 const quickAvgTime = computed(() => {
@@ -150,6 +166,17 @@ function tryNow(cat: CategoryKey) {
       </div>
       <div class="pct">{{ summary.pct }}%</div>
 
+      <div class="coins-card" role="status" :aria-label="`Coins earned this quiz: ${earnedThisQuiz}`">
+        <div class="row">
+          <span class="label">Coins earned this quiz</span>
+          <span class="value positive">+{{ earnedThisQuiz }}</span>
+        </div>
+        <div class="row">
+          <span class="label">New balance</span>
+          <span class="value balance">{{ balance }}</span>
+        </div>
+      </div>
+
       <!-- Celebration banner for new unlocks -->
       <transition name="fade">
         <div
@@ -244,6 +271,32 @@ function tryNow(cat: CategoryKey) {
   font-weight: 800;
   color: var(--primary);
   margin-top: .25rem;
+}
+.coins-card {
+  margin-top: 0.75rem;
+  background: #ffffff;
+  border: 1px solid rgba(37,99,235,0.15);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 12px rgba(37,99,235,0.08);
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+.label {
+  color: #111827;
+  opacity: 0.8;
+}
+.value {
+  font-weight: 700;
+}
+.value.positive {
+  color: #F59E0B;
+}
+.value.balance {
+  color: #2563EB;
 }
 .unlock-banner {
   display: inline-flex;
