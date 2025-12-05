@@ -74,6 +74,7 @@ function goHome() {
             <th scope="col">Player</th>
             <th scope="col">Score</th>
             <th scope="col">Category</th>
+            <th scope="col">Mode</th>
             <th scope="col">Date</th>
           </tr>
         </thead>
@@ -90,6 +91,17 @@ function goHome() {
             </td>
             <td data-label="Category">
               <span class="pill">{{ s.categoryLabel || s.category }}</span>
+            </td>
+            <td data-label="Mode">
+              <template v-if="(s.meta as any)?.mode === 'daily'">
+                <span class="pill pill-daily" title="Daily Quiz">
+                  Daily
+                </span>
+                <span class="meta-small">
+                  (Streak: {{ (s.meta as any)?.streakAtCompletion || 0 }})
+                </span>
+              </template>
+              <template v-else>-</template>
             </td>
             <td data-label="Date">
               <time :datetime="new Date(s.date).toISOString()">
@@ -236,6 +248,16 @@ function goHome() {
   color: var(--primary);
   font-weight: 700;
   font-size: .75rem;
+}
+.pill-daily {
+  border-color: rgba(37,99,235,.25);
+  color: #2563EB;
+  background: linear-gradient(90deg, rgba(37,99,235,.08), rgba(255,255,255,1));
+}
+.meta-small {
+  margin-left: .35rem;
+  color: var(--muted);
+  font-size: .8rem;
 }
 
 /* Responsive labels for mobile */

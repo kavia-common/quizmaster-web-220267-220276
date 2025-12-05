@@ -37,3 +37,40 @@ const pools: Record<CategoryKey, QuizQuestion[]> = {
 }
 
 export default pools
+
+// PUBLIC_INTERFACE
+export function getDailyQuestionSet(seed: string, count = 10, category?: CategoryKey | null): QuizQuestion[] {
+  /** Deterministically select a set of questions from pools using a seed.
+   * If category provided, pick from that category; otherwise from all.
+   */
+  function seededHash(str: string): number {
+    let h = 2166136261 >>> 0
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i)
+      h = Math.imul(h, 16777619)
+    }
+    return (h >>> 0) || 1
+  }
+  function makeRng(seedNum: number) {
+    let s = seedNum >>> 0
+    return function next(): number {
+      s ^= s << 13
+      s ^= s >>> 17
+      s ^= s << 5
+      return ((s >>> 0) / 0xffffffff)
+    }
+  }
+  function pick<T>(arr: T[], n: number, rng: () => number): T[] {
+    const idx = arr.map((_, i) => i)
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1))
+      ;[idx[i], idx[j]] = [idx[j], idx[i]]
+    }
+    return idx.slice(0, Math.min(n, idx.length)).map(i => arr[i])
+  }
+  const seedNum = seededHash(seed)
+  const rng = makeRng(seedNum)
+  const src = category ? (pools[category] ?? []) : Object.values(pools).flat()
+  if (!src.length) return []
+  return pick(src, count, rng)
+}

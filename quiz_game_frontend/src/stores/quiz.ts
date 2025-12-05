@@ -34,6 +34,8 @@ type ScoreEntry = {
   category: CategoryKey
   categoryLabel?: string
   date: number
+  // optional metadata; used for daily mode tagging
+  meta?: unknown
 }
 
 type LifelineUsage = {
@@ -663,7 +665,7 @@ export const useQuizStore = defineStore('quiz', () => {
   // Results & Scoreboard
 
   // PUBLIC_INTERFACE
-  function addScore(entry: { player?: string | null; score: number; total: number; category: CategoryKey; categoryLabel?: string }): void {
+  function addScore(entry: { player?: string | null; score: number; total: number; category: CategoryKey; categoryLabel?: string; meta?: unknown }): void {
     /**
      * Add a score to persistent storage (localStorage). Stores latest at the top.
      * Omits player name if not provided.
@@ -676,6 +678,7 @@ export const useQuizStore = defineStore('quiz', () => {
       category: entry.category,
       categoryLabel: entry.categoryLabel,
       date: Date.now(),
+      meta: entry.meta,
     }
     const next = [normalized, ...existing].slice(0, 100) // cap to 100 entries
     writeScores(next)

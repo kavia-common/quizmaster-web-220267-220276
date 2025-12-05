@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useQuizStore, type CategoryKey } from '@/stores/quiz'
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useDailyQuizStore } from '@/stores/dailyQuiz'
 
 const router = useRouter()
 const quiz = useQuizStore()
+const daily = useDailyQuizStore()
+
 const busy = ref(false)
 const loadError = ref<string | null>(null)
+const arAnnounce = ref('')
+
 const categories: { key: CategoryKey; label: string; emoji: string; hint: string }[] = [
   { key: 'gk', label: 'General Knowledge', emoji: '🧠', hint: 'A bit of everything' },
   { key: 'sports', label: 'Sports', emoji: '🏅', hint: 'Games and records' },
@@ -18,11 +23,15 @@ const categories: { key: CategoryKey; label: string; emoji: string; hint: string
 const picked = ref<CategoryKey>(quiz.selectedCategory ?? 'gk')
 
 const hasSession = computed(() => quiz.hasSavedSession())
+const hasDailySession = computed(() => daily.hasSavedDaily())
 const sessionProgress = computed(() => quiz.progress)
 const sessionCategoryLabel = computed(() => ({
   gk: 'General Knowledge', sports: 'Sports', movies: 'Movies',
   science: 'Science', history: 'History', geography: 'Geography'
 }[quiz.selectedCategory] || quiz.selectedCategory))
+
+const todayKey = computed(() => daily.getPersistentOverview().dailyDate)
+const dailyStreak = computed(() => daily.getPersistentOverview().streakCount)
 
 async function start() {
   if (hasSession.value) {
@@ -48,10 +57,36 @@ async function resume() {
   if (ok) {
     router.push({ name: 'quiz' })
   } else {
-    // fallback: if resume failed, try normal start with current category
     await start()
   }
 }
+
+async function startDaily() {
+  if (hasDailySession.value) {
+    const ok = window.confirm('A daily attempt is in progress. Start over and discard it?')
+    if (!ok) return
+    daily.clearSession()
+  }
+  busy.value = true
+  await daily.prepareToday(null, 10)
+  busy.value = false
+  if (!daily.error && daily.questions.length) {
+    router.push({ name: 'daily' })
+  }
+}
+
+async function resumeDaily() {
+  const ok = await daily.resumeIfAvailable()
+  if (ok) {
+    router.push({ name: 'daily' })
+  } else {
+    await startDaily()
+  }
+}
+
+onMounted(() => {
+  arAnnounce.value = `Daily quiz for ${todayKey.value}. Current streak ${dailyStreak.value} days.`
+})
 </script>
 
 <template>
@@ -59,6 +94,43 @@ async function resume() {
     <div class="hero-inner">
       <h2 class="hero-title">Welcome to QuizMaster</h2>
       <p class="hero-sub">Choose a category to begin your journey.</p>
+
+      <span class="sr-only" aria-live="polite">{{ arAnnounce }}</span>
+
+      <div class="daily card">
+        <div class="daily-left">
+          <div class="daily-badge" aria-hidden="true">Daily</div>
+          <div class="daily-info">
+            <div class="daily-title">Daily Quiz</div>
+            <div class="daily-sub">Today: <strong>{{ todayKey }}</strong></div>
+          </div>
+        </div>
+        <div class="daily-right">
+          <span class="streak" role="status" aria-live="polite" :aria-label="`Current streak ${dailyStreak} days`">
+            🔥 {{ dailyStreak }} day{{ dailyStreak === 1 ? '' : 's' }}
+          </span>
+          <button
+            v-if="hasDailySession"
+            class="btn btn-primary"
+            @click="resumeDaily"
+            :disabled="busy"
+            aria-label="Resume Daily Quiz"
+            title="Resume Daily Quiz"
+          >
+            Resume Daily
+          </button>
+          <button
+            v-else
+            class="btn btn-secondary"
+            @click="startDaily"
+            :disabled="busy"
+            aria-label="Start Daily Quiz"
+            title="Start Daily Quiz"
+          >
+            Start Daily
+          </button>
+        </div>
+      </div>
 
       <div class="grid">
         <button
@@ -180,6 +252,52 @@ async function resume() {
 .cat-hint {
   color: var(--muted);
   font-size: .85rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap; border: 0;
+}
+
+.daily {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  background: var(--surface);
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: .75rem .9rem;
+  margin: .5rem 0 1rem;
+}
+.daily-left { display: flex; align-items: center; gap: .75rem; }
+.daily-badge {
+  padding: .1rem .5rem;
+  font-size: .75rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+.daily-info { display: grid; gap: .1rem; }
+.daily-title { font-weight: 800; color: var(--text); }
+.daily-sub { font-size: .85rem; color: var(--muted); }
+.daily-right { display: flex; align-items: center; gap: .5rem; }
+.streak {
+  display: inline-flex;
+  align-items: center;
+  padding: .15rem .5rem;
+  border-radius: 999px;
+  border: 1px solid #fde68a;
+  background: linear-gradient(90deg, rgba(245,158,11,.12), rgba(255,255,255,1));
+  color: var(--secondary);
+  font-weight: 700;
+  font-size: .8rem;
 }
 
 .hero-actions {
