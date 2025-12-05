@@ -10,7 +10,7 @@ const router = useRouter()
 const quiz = useQuizStore()
 
 // Show countdown if navigated from a fresh start (query flag) and not resuming
-const showCountdown = ref(false)
+const showCountdown = ref<boolean>(false)
 const isFreshSession = computed(() => {
   const q = router.currentRoute.value.query
   return q && q.startWithCountdown === '1'
@@ -63,6 +63,21 @@ function stopTicking() {
     clearInterval(timerInterval)
     timerInterval = undefined
   }
+}
+
+/**
+ * Handle countdown completion: stamp start time, start ticking, hide overlay, and strip query flag.
+ */
+function onCountdownComplete() {
+  const curId = quiz.current?.id
+  if (curId != null && quiz.qStartTs[curId] == null) {
+    quiz.qStartTs[curId] = Date.now()
+  }
+  startTicking()
+  showCountdown.value = false
+  const q = { ...router.currentRoute.value.query }
+  delete (q as Record<string, unknown>).startWithCountdown
+  router.replace({ query: q })
 }
 
 function handleSubmitOrNext() {
@@ -175,21 +190,7 @@ onBeforeUnmount(() => {
 
     <CountdownOverlay
       v-if="showCountdown"
-      @complete="
-        () => {
-          // start timers and stamp question visible moment
-          const curId = quiz.current?.id
-          if (curId != null && quiz.qStartTs[curId] == null) {
-            quiz.qStartTs[curId] = Date.now()
-          }
-          startTicking()
-          showCountdown = false
-          // remove the query flag to avoid repeated countdown on navigation
-          const q = { ...$router.currentRoute.value.query }
-          delete q.startWithCountdown
-          $router.replace({ query: q })
-        }
-      "
+      @complete="onCountdownComplete"
     />
 
     <!-- Lifelines -->

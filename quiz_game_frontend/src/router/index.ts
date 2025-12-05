@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { Router } from 'vue-router'
-import { useQuizStore } from '@/stores/quiz'
+import { useQuizStore } from '../stores/quiz'
 
 const StartView = () => import('../views/StartView.vue')
 const QuizView = () => import('../views/QuizView.vue')

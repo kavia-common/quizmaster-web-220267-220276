@@ -11,7 +11,7 @@ const router = useRouter()
 const daily = useDailyQuizStore()
 const quiz = useQuizStore() // for addScore function reuse
 
-const showCountdown = ref(false)
+const showCountdown = ref<boolean>(false)
 const isFreshSession = computed(() => {
   const q = router.currentRoute.value.query
   return q && q.startWithCountdown === '1'
@@ -31,7 +31,7 @@ async function ensureDaily() {
     // remove the flag immediately from URL to avoid later re-use
     if (shouldCountdown) {
       const q = { ...router.currentRoute.value.query }
-      delete q.startWithCountdown
+      delete (q as Record<string, unknown>).startWithCountdown
       router.replace({ query: q })
     }
   } else {
@@ -72,6 +72,13 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (sparkleTimer) clearTimeout(sparkleTimer)
 })
+
+/**
+ * Handle countdown complete in Daily mode: simply hide the overlay.
+ */
+function onCountdownComplete() {
+  showCountdown.value = false
+}
 </script>
 
 <template>
@@ -106,7 +113,7 @@ onBeforeUnmount(() => {
 
     <CountdownOverlay
       v-if="showCountdown"
-      @complete="() => { showCountdown = false }"
+      @complete="onCountdownComplete"
     />
 
     <div class="lifelines card" role="group" aria-label="Daily Lifelines">
