@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import TheWelcome from '../components/TheWelcome.vue'
+// Deprecated template view kept to avoid import errors if referenced elsewhere.
 </script>
 
 <template>
-  <main>
-    <TheWelcome />
-  </main>
+  <main />
 </template>
