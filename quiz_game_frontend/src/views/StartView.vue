@@ -404,6 +404,15 @@ const coinBalance = vComputed(() => coins.getBalance)
         >
           Tournament
         </button>
+        <button
+          class="btn btn-secondary"
+          @click="router.push({ name: 'custom-home' })"
+          :disabled="busy"
+          title="Create or play custom quizzes"
+          aria-label="Open Custom Quiz builder and library"
+        >
+          Custom Quiz
+        </button>
       </div>
       <p v-if="loadError" class="error">{{ loadError }}</p>
 

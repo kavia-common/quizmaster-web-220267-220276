@@ -15,6 +15,11 @@ const TournamentLobbyView = () => import('../views/TournamentLobbyView.vue')
 const TournamentPlayView = () => import('../views/TournamentPlayView.vue')
 const TournamentResultsView = () => import('../views/TournamentResultsView.vue')
 
+const CustomQuizHomeView = () => import('../views/CustomQuizHomeView.vue')
+const CustomQuizBuilderView = () => import('../views/CustomQuizBuilderView.vue')
+const CustomQuizPlayView = () => import('../views/CustomQuizPlayView.vue')
+const CustomQuizImportView = () => import('../views/CustomQuizImportView.vue')
+
 const router: Router = createRouter({
   // Use explicit fallback to '/' if BASE_URL is undefined to avoid dev/preview subpath issues
   history: createWebHistory(import.meta.env.BASE_URL || '/'),
@@ -31,6 +36,14 @@ const router: Router = createRouter({
     { path: '/tournament', name: 'tournament-lobby', component: TournamentLobbyView },
     { path: '/tournament/play', name: 'tournament-play', component: TournamentPlayView },
     { path: '/tournament/results', name: 'tournament-results', component: TournamentResultsView },
+
+    // Custom quizzes
+    { path: '/custom', name: 'custom-home', component: CustomQuizHomeView },
+    { path: '/custom/new', name: 'custom-new', component: CustomQuizBuilderView },
+    { path: '/custom/edit/:id', name: 'custom-edit', component: CustomQuizBuilderView, props: true },
+    { path: '/custom/play/:id', name: 'custom-play', component: CustomQuizPlayView, props: true },
+    { path: '/custom/import/:token', name: 'custom-import', component: CustomQuizImportView, props: true },
+
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
