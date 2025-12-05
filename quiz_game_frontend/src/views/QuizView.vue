@@ -127,9 +127,13 @@ onBeforeUnmount(() => {
         class="btn btn-primary"
         @click="quiz.isLast ? $router.push({ name: 'results' }) : quiz.nextQuestion()"
       >
-        {{ quiz.isLast ? 'See Results' : 'Next' }}
+        {{ quiz.isLast ? 'See Results' : 'Continue' }}
       </button>
     </div>
+
+    <p v-if="quiz.hasSubmitted" class="read-hint" aria-live="polite">
+      Review the explanation above, then press Continue to proceed.
+    </p>
   </div>
 </template>
 
@@ -158,5 +162,10 @@ onBeforeUnmount(() => {
   width: .5rem; height: .5rem; border-radius: 50%;
   background: var(--secondary);
   box-shadow: 0 0 0 3px rgba(245, 158, 11, .18);
+}
+.read-hint {
+  color: var(--muted);
+  font-size: .9rem;
+  margin-left: .25rem;
 }
 </style>

@@ -6,6 +6,18 @@ export type QuizQuestion = {
   question: string
   options: string[]
   answerIndex: number
+  /**
+   * Optional explanation text shown after answering, to provide additional context.
+   */
+  explanation?: string
+  /**
+   * Optional short source label displayed next to explanation (e.g., "Wikipedia").
+   */
+  source?: string
+  /**
+   * Optional reference URL for "Learn more" link.
+   */
+  referenceUrl?: string
 }
 
 export type CategoryKey = 'gk' | 'sports' | 'movies' | 'science' | 'history' | 'geography'
@@ -33,34 +45,144 @@ type SessionSchema = {
 // Simple sample fallback pools per category to keep UX coherent when no backend is configured
 const fallbackPools: Record<CategoryKey, QuizQuestion[]> = {
   gk: [
-    { id: 'gk-1', question: 'What is the capital of France?', options: ['Madrid', 'Paris', 'Berlin', 'Rome'], answerIndex: 1 },
-    { id: 'gk-2', question: 'What is 9 + 10?', options: ['18', '19', '20'], answerIndex: 1 },
-    { id: 'gk-3', question: 'Which language runs in a web browser?', options: ['Java', 'C', 'Python', 'JavaScript'], answerIndex: 3 },
+    {
+      id: 'gk-1',
+      question: 'What is the capital of France?',
+      options: ['Madrid', 'Paris', 'Berlin', 'Rome'],
+      answerIndex: 1,
+      explanation: 'Paris is the capital and most populous city of France.',
+      source: 'Wikipedia',
+      referenceUrl: 'https://en.wikipedia.org/wiki/Paris'
+    },
+    {
+      id: 'gk-2',
+      question: 'What is 9 + 10?',
+      options: ['18', '19', '20'],
+      answerIndex: 1,
+      explanation: 'Basic arithmetic: 9 + 10 equals 19.'
+    },
+    {
+      id: 'gk-3',
+      question: 'Which language runs in a web browser?',
+      options: ['Java', 'C', 'Python', 'JavaScript'],
+      answerIndex: 3,
+      explanation: 'JavaScript is the standard language for client-side web development.'
+    },
   ],
   sports: [
-    { id: 'sp-1', question: 'How many players in a football (soccer) team on the field?', options: ['9', '10', '11', '12'], answerIndex: 2 },
-    { id: 'sp-2', question: 'In tennis, what is 0 points called?', options: ['Null', 'Love', 'Zero', 'Nil'], answerIndex: 1 },
-    { id: 'sp-3', question: 'Which country hosts the Tour de France?', options: ['Italy', 'France', 'Spain', 'Belgium'], answerIndex: 1 },
+    {
+      id: 'sp-1',
+      question: 'How many players in a football (soccer) team on the field?',
+      options: ['9', '10', '11', '12'],
+      answerIndex: 2,
+      explanation: 'A standard soccer team fields 11 players, including the goalkeeper.'
+    },
+    {
+      id: 'sp-2',
+      question: 'In tennis, what is 0 points called?',
+      options: ['Null', 'Love', 'Zero', 'Nil'],
+      answerIndex: 1,
+      explanation: 'In tennis scoring, “love” means zero.'
+    },
+    {
+      id: 'sp-3',
+      question: 'Which country hosts the Tour de France?',
+      options: ['Italy', 'France', 'Spain', 'Belgium'],
+      answerIndex: 1,
+      explanation: 'The Tour de France is an annual men’s multiple stage bicycle race primarily held in France.'
+    },
   ],
   movies: [
-    { id: 'mv-1', question: 'Who directed Inception?', options: ['Steven Spielberg', 'Christopher Nolan', 'James Cameron', 'Ridley Scott'], answerIndex: 1 },
-    { id: 'mv-2', question: 'The Hobbit is set in which world?', options: ['Narnia', 'Earthsea', 'Middle-earth', 'Westeros'], answerIndex: 2 },
-    { id: 'mv-3', question: 'Which film features a DeLorean time machine?', options: ['Back to the Future', 'Terminator', 'Looper', 'Primer'], answerIndex: 0 },
+    {
+      id: 'mv-1',
+      question: 'Who directed Inception?',
+      options: ['Steven Spielberg', 'Christopher Nolan', 'James Cameron', 'Ridley Scott'],
+      answerIndex: 1,
+      explanation: 'Christopher Nolan wrote and directed Inception (2010).'
+    },
+    {
+      id: 'mv-2',
+      question: 'The Hobbit is set in which world?',
+      options: ['Narnia', 'Earthsea', 'Middle-earth', 'Westeros'],
+      answerIndex: 2,
+      explanation: 'Middle-earth is the fictional setting of Tolkien’s legendarium.'
+    },
+    {
+      id: 'mv-3',
+      question: 'Which film features a DeLorean time machine?',
+      options: ['Back to the Future', 'Terminator', 'Looper', 'Primer'],
+      answerIndex: 0,
+      explanation: 'Back to the Future popularized the DeLorean as a time machine.'
+    },
   ],
   science: [
-    { id: 'sc-1', question: 'Which planet is known as the Red Planet?', options: ['Venus', 'Saturn', 'Mars', 'Jupiter'], answerIndex: 2 },
-    { id: 'sc-2', question: 'H2O is the chemical formula for?', options: ['Hydrogen', 'Oxygen', 'Water', 'Helium'], answerIndex: 2 },
-    { id: 'sc-3', question: 'Speed of light is approximately?', options: ['3x10^8 m/s', '3x10^6 m/s', '30000 km/s', '3x10^10 m/s'], answerIndex: 0 },
+    {
+      id: 'sc-1',
+      question: 'Which planet is known as the Red Planet?',
+      options: ['Venus', 'Saturn', 'Mars', 'Jupiter'],
+      answerIndex: 2,
+      explanation: 'Mars appears reddish due to iron oxide (rust) on its surface.'
+    },
+    {
+      id: 'sc-2',
+      question: 'H2O is the chemical formula for?',
+      options: ['Hydrogen', 'Oxygen', 'Water', 'Helium'],
+      answerIndex: 2,
+      explanation: 'Two hydrogen atoms bonded to one oxygen atom makes water.'
+    },
+    {
+      id: 'sc-3',
+      question: 'Speed of light is approximately?',
+      options: ['3x10^8 m/s', '3x10^6 m/s', '30000 km/s', '3x10^10 m/s'],
+      answerIndex: 0,
+      explanation: 'In vacuum, light speed is around 3 × 10^8 meters per second.'
+    },
   ],
   history: [
-    { id: 'hs-1', question: 'Who painted the Mona Lisa?', options: ['Picasso', 'Da Vinci', 'Van Gogh'], answerIndex: 1 },
-    { id: 'hs-2', question: 'The pyramids are located in which country?', options: ['Peru', 'Egypt', 'Mexico', 'China'], answerIndex: 1 },
-    { id: 'hs-3', question: 'World War II ended in which year?', options: ['1943', '1944', '1945', '1946'], answerIndex: 2 },
+    {
+      id: 'hs-1',
+      question: 'Who painted the Mona Lisa?',
+      options: ['Picasso', 'Da Vinci', 'Van Gogh'],
+      answerIndex: 1,
+      explanation: 'Leonardo da Vinci painted the Mona Lisa in the early 16th century.'
+    },
+    {
+      id: 'hs-2',
+      question: 'The pyramids are located in which country?',
+      options: ['Peru', 'Egypt', 'Mexico', 'China'],
+      answerIndex: 1,
+      explanation: 'The most famous pyramids, including those at Giza, are in Egypt.'
+    },
+    {
+      id: 'hs-3',
+      question: 'World War II ended in which year?',
+      options: ['1943', '1944', '1945', '1946'],
+      answerIndex: 2,
+      explanation: 'WWII ended in 1945 with the formal surrender of Axis powers.'
+    },
   ],
   geography: [
-    { id: 'ge-1', question: 'Which is the largest ocean?', options: ['Atlantic', 'Indian', 'Pacific', 'Arctic'], answerIndex: 2 },
-    { id: 'ge-2', question: 'Mount Everest is in which mountain range?', options: ['Andes', 'Himalayas', 'Alps', 'Rockies'], answerIndex: 1 },
-    { id: 'ge-3', question: 'The Nile river flows into which sea?', options: ['Black Sea', 'Red Sea', 'Mediterranean Sea', 'Arabian Sea'], answerIndex: 2 },
+    {
+      id: 'ge-1',
+      question: 'Which is the largest ocean?',
+      options: ['Atlantic', 'Indian', 'Pacific', 'Arctic'],
+      answerIndex: 2,
+      explanation: 'The Pacific Ocean is the largest and deepest of Earth’s oceanic divisions.'
+    },
+    {
+      id: 'ge-2',
+      question: 'Mount Everest is in which mountain range?',
+      options: ['Andes', 'Himalayas', 'Alps', 'Rockies'],
+      answerIndex: 1,
+      explanation: 'Everest is part of the Himalayas on the border of Nepal and China (Tibet).'
+    },
+    {
+      id: 'ge-3',
+      question: 'The Nile river flows into which sea?',
+      options: ['Black Sea', 'Red Sea', 'Mediterranean Sea', 'Arabian Sea'],
+      answerIndex: 2,
+      explanation: 'The Nile empties into the Mediterranean Sea near Alexandria, Egypt.'
+    },
   ],
 }
 
@@ -76,7 +198,7 @@ const categoryParamMap: Record<CategoryKey, string> = {
 
 const SCOREBOARD_KEY = 'quizmaster:scores'
 const SESSION_KEY = 'quizmaster:session'
-const SESSION_VERSION = 1
+const SESSION_VERSION = 2
 
 // Storage helpers to isolate localStorage usage and handle parse errors gracefully
 function readScores(): ScoreEntry[] {
@@ -105,7 +227,8 @@ function safeReadSession(): SessionSchema | null {
     const data = JSON.parse(raw) as Partial<SessionSchema> | unknown
     if (!data || typeof data !== 'object') return null
     const obj = data as Partial<SessionSchema>
-    if (obj.version !== SESSION_VERSION) return null
+    // accept version 1 or 2 for forward/backward compatibility
+    if (obj.version !== 1 && obj.version !== SESSION_VERSION) return null
     if (
       !obj.questions ||
       !Array.isArray(obj.questions) ||
@@ -120,7 +243,7 @@ function safeReadSession(): SessionSchema | null {
     ) {
       return null
     }
-    // minimal validation of question schema
+    // minimal validation of question schema, include explanation fields if present
     const qs: QuizQuestion[] = (obj.questions as unknown[])
       .filter((q: unknown) => {
         if (!q || typeof q !== 'object') return false
@@ -129,11 +252,20 @@ function safeReadSession(): SessionSchema | null {
       })
       .map((q: unknown, i: number) => {
         const r = q as Record<string, unknown>
+        // support alias 'detail' for explanation if older data used that key
+        const explanation =
+          (typeof r.explanation === 'string' ? (r.explanation as string) : undefined) ??
+          (typeof (r as Record<string, unknown>).detail === 'string' ? String((r as Record<string, unknown>).detail) : undefined)
+        const referenceUrl = typeof r.referenceUrl === 'string' ? (r.referenceUrl as string) : undefined
+        const source = typeof r.source === 'string' ? (r.source as string) : undefined
         return {
           id: (r.id as string | number | undefined) ?? i + 1,
           question: String(r.question),
           options: (r.options as unknown[]).map(String),
           answerIndex: Number(r.answerIndex),
+          explanation,
+          referenceUrl,
+          source,
         } as QuizQuestion
       })
     if (!qs.length) return null
@@ -190,6 +322,9 @@ export const useQuizStore = defineStore('quiz', () => {
   const current = computed(() => questions.value[currentIndex.value] || null)
   const progress = computed(() => (total.value ? Math.round(((currentIndex.value) / total.value) * 100) : 0))
   const isLast = computed(() => currentIndex.value >= total.value - 1)
+  const isCurrentCorrect = computed(() =>
+    hasSubmitted.value && current.value ? selectedIndex.value === current.value.answerIndex : null
+  )
 
   function resetRuntime() {
     currentIndex.value = 0
@@ -269,11 +404,19 @@ export const useQuizStore = defineStore('quiz', () => {
           })
           .map((q: unknown, i: number): QuizQuestion => {
             const obj = q as Record<string, unknown>
+            const explanation =
+              (typeof obj.explanation === 'string' ? (obj.explanation as string) : undefined) ??
+              (typeof (obj as Record<string, unknown>).detail === 'string' ? String((obj as Record<string, unknown>).detail) : undefined)
+            const referenceUrl = typeof obj.referenceUrl === 'string' ? (obj.referenceUrl as string) : undefined
+            const source = typeof obj.source === 'string' ? (obj.source as string) : undefined
             return {
               id: (obj.id as string | number | undefined) ?? i + 1,
               question: String(obj.question),
               options: (obj.options as unknown[]).map(String),
               answerIndex: Number(obj.answerIndex),
+              explanation,
+              referenceUrl,
+              source,
             }
           })
 
@@ -461,6 +604,7 @@ export const useQuizStore = defineStore('quiz', () => {
     current,
     progress,
     isLast,
+    isCurrentCorrect,
     // actions
     resetAll,
     loadQuestions,

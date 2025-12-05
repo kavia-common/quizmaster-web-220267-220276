@@ -46,6 +46,44 @@ function onKeydownOption(e: KeyboardEvent, idx: number) {
           <span class="opt-text">{{ opt }}</span>
         </button>
       </div>
+
+      <!-- Explanation / feedback -->
+      <div
+        v-if="hasSubmitted"
+        class="explain card"
+        role="region"
+        aria-label="Answer feedback"
+      >
+        <div
+          class="feedback"
+          :class="selectedIndex === question.answerIndex ? 'ok' : 'bad'"
+          aria-live="polite"
+        >
+          <span class="fb-emoji" aria-hidden="true">{{ selectedIndex === question.answerIndex ? '✅' : '❌' }}</span>
+          <span class="fb-text">
+            {{ selectedIndex === question.answerIndex ? 'Correct' : 'Incorrect' }}.
+            The right answer is
+            <strong>{{ String.fromCharCode(65 + question.answerIndex) }}. {{ question.options[question.answerIndex] }}</strong>.
+          </span>
+        </div>
+
+        <p v-if="question.explanation" class="exp">
+          {{ question.explanation }}
+          <template v-if="question.source">
+            <span class="src">— {{ question.source }}</span>
+          </template>
+        </p>
+
+        <a
+          v-if="question.referenceUrl"
+          class="learn"
+          :href="question.referenceUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Learn more
+        </a>
+      </div>
     </div>
   </div>
 </template>
@@ -62,7 +100,7 @@ function onKeydownOption(e: KeyboardEvent, idx: number) {
 }
 .q-body {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 .opt-index {
   font-weight: 700;
@@ -72,4 +110,40 @@ function onKeydownOption(e: KeyboardEvent, idx: number) {
 .opt-text {
   font-weight: 500;
 }
+
+/* Explanation panel styled with Ocean Professional theme */
+.explain {
+  padding: .9rem;
+  border-radius: .9rem;
+  border: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, rgba(59,130,246,0.06), rgba(255,255,255,1));
+  box-shadow: 0 4px 10px rgba(0,0,0,.04), 0 2px 4px rgba(0,0,0,.03);
+  display: grid;
+  gap: .5rem;
+}
+.feedback {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-weight: 700;
+}
+.feedback.ok { color: #0e9f6e; }
+.feedback.bad { color: var(--error); }
+.fb-emoji { font-size: 1rem; }
+.exp {
+  color: var(--text);
+}
+.src {
+  color: var(--muted);
+  margin-left: .25rem;
+}
+.learn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+.learn:hover { text-decoration: underline; }
 </style>
