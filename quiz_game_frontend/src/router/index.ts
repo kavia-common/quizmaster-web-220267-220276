@@ -11,6 +11,9 @@ const MultiplayerGameView = () => import('../views/MultiplayerGameView.vue')
 const DailyQuizView = () => import('../views/DailyQuizView.vue')
 const AnalyticsView = () => import('../views/AnalyticsView.vue')
 const ManageOfflineView = () => import('../views/ManageOfflineView.vue')
+const TournamentLobbyView = () => import('../views/TournamentLobbyView.vue')
+const TournamentPlayView = () => import('../views/TournamentPlayView.vue')
+const TournamentResultsView = () => import('../views/TournamentResultsView.vue')
 
 const router: Router = createRouter({
   // Use explicit fallback to '/' if BASE_URL is undefined to avoid dev/preview subpath issues
@@ -25,6 +28,9 @@ const router: Router = createRouter({
     { path: '/offline/manage', name: 'offline-manage', component: ManageOfflineView },
     { path: '/multiplayer', name: 'mp-lobby', component: MultiplayerLobbyView },
     { path: '/multiplayer/game', name: 'mp-game', component: MultiplayerGameView },
+    { path: '/tournament', name: 'tournament-lobby', component: TournamentLobbyView },
+    { path: '/tournament/play', name: 'tournament-play', component: TournamentPlayView },
+    { path: '/tournament/results', name: 'tournament-results', component: TournamentResultsView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

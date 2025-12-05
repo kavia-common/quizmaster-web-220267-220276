@@ -395,6 +395,15 @@ const coinBalance = vComputed(() => coins.getBalance)
         >
           View Analytics
         </button>
+        <button
+          class="btn btn-secondary"
+          @click="router.push({ name: 'tournament-lobby' })"
+          :disabled="busy"
+          title="Tournament mode"
+          aria-label="Open Tournament mode"
+        >
+          Tournament
+        </button>
       </div>
       <p v-if="loadError" class="error">{{ loadError }}</p>
 
