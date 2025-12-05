@@ -328,32 +328,8 @@ function safeReadSession(): SessionSchema | null {
           (typeof (r as Record<string, unknown>).clue === 'string'
             ? String((r as Record<string, unknown>).clue)
             : undefined)
-        // PUBLIC_INTERFACE
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  function listAnalytics(): AnalyticsRecord[] {
-    /** Returns analytics history. Backfills partial data from scoreboard when necessary. */
-    const analytics = readAnalytics()
-    if (analytics.length) return analytics
-    // backfill from scores (no durations)
-    const scores = readScores()
-    return scores.map((s) => ({
-      totalQuestions: s.total,
-      correctCount: s.score,
-      wrongCount: Math.max(0, s.total - s.score),
-      skippedCount: 0,
-      durations: [],
-      category: s.category,
-      mode:
-        s.meta && typeof s.meta === 'object' && (s.meta as { mode?: string }).mode === 'daily'
-          ? 'daily'
-          : 'normal',
-      startedAt: s.date,
-      completedAt: s.date,
-      longestCorrectStreak: 0,
-    }))
-  }
 
-  return {
+        return {
           id: (r.id as string | number | undefined) ?? i + 1,
           question: String(r.question),
           options: (r.options as unknown[]).map(String),
@@ -407,6 +383,32 @@ function writeAnalytics(arr: AnalyticsRecord[]) {
   } catch {
     // ignore
   }
+}
+
+/**
+ * PUBLIC_INTERFACE
+ * Returns analytics history. Backfills partial data from scoreboard when necessary.
+ */
+export function listAnalytics(): AnalyticsRecord[] {
+  const analytics = readAnalytics()
+  if (analytics.length) return analytics
+  // backfill from scores (no durations)
+  const scores = readScores()
+  return scores.map((s) => ({
+    totalQuestions: s.total,
+    correctCount: s.score,
+    wrongCount: Math.max(0, s.total - s.score),
+    skippedCount: 0,
+    durations: [],
+    category: s.category,
+    mode:
+      s.meta && typeof s.meta === 'object' && (s.meta as { mode?: string }).mode === 'daily'
+        ? 'daily'
+        : 'normal',
+    startedAt: s.date,
+    completedAt: s.date,
+    longestCorrectStreak: 0,
+  }))
 }
 
 function safeWriteSession(payload: SessionSchema | null): void {
