@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuizStore } from '@/stores/quiz'
-
+import { useCategoryUnlockStore } from '@/stores/categoryUnlocks'
 
 type DailyMetaRecord = {
   mode: 'daily'
@@ -13,7 +13,7 @@ type DailyMetaRecord = {
 
 const router = useRouter()
 const quiz = useQuizStore()
-
+const unlocks = useCategoryUnlockStore()
 
 const categoryLabels: Record<string, string> = {
   gk: 'General Knowledge',
@@ -66,7 +66,26 @@ const dailyMeta = computed<DailyMetaRecord>(() => {
 })
 const isDaily = computed(() => dailyMeta.value !== null)
 
+// New UI state for unlock celebration and motivation
+import type { CategoryKey } from '@/stores/quiz'
+const newlyUnlocked = ref<Array<CategoryKey>>([])
+const showCongrats = ref(false)
+const encouragement = computed(() => {
+  // If user scored below 80 and there is a next locked path, show motivational message
+  const pct = summary.value.pct
+  if (pct >= 80) return null
+  // Find a next target based on prerequisites: pick first category whose prereqs include current category and is still locked
+  const nextTargets = (Object.entries(unlocks.state.prerequisites) as Array<[CategoryKey, CategoryKey[]]>)
+    .filter(([cat, deps]) => deps.includes(quiz.selectedCategory) && !unlocks.isUnlocked(cat))
+    .map(([cat]) => cat)
+  if (!nextTargets.length) return null
+  const next = nextTargets[0]
+  const prereqLabel = categoryLabels[quiz.selectedCategory] || String(quiz.selectedCategory)
+  return `You're close! Score 80% in ${prereqLabel} to unlock ${categoryLabels[next]}. Try lifelines and explanations to improve!`
+})
+
 onMounted(() => {
+  unlocks.loadUnlocks()
   // Save score once when arriving on results screen
   // Ask for a quick name/initials prompt; fallback to Anonymous
   try {
@@ -85,6 +104,21 @@ onMounted(() => {
   } catch {
     // ignore if sessionStorage not available
   }
+
+  // Evaluate unlocks using this session accuracy
+  try {
+    const mode: 'normal' | 'daily' | 'multiplayer' = isDaily.value ? 'daily' : 'normal'
+    const list = unlocks.evaluateUnlocksFromScore({
+      category: quiz.selectedCategory,
+      accuracyPercent: summary.value.pct,
+      mode,
+    }) as Array<CategoryKey>
+    newlyUnlocked.value = list
+    showCongrats.value = list.length > 0
+  } catch {
+    // ignore unlock evaluation errors
+  }
+
   // clear in-progress session once results are recorded to avoid resuming a completed quiz
   try {
     quiz.clearSession()
@@ -97,6 +131,13 @@ function restart() {
   quiz.resetAll()
   router.push({ name: 'start' })
 }
+
+function tryNow(cat: CategoryKey) {
+  // Start a new quiz immediately in the newly unlocked category
+  quiz.resetAll()
+  quiz.setCategory(cat)
+  router.push({ name: 'quiz' })
+}
 </script>
 
 <template>
@@ -108,6 +149,33 @@ function restart() {
         <div class="meter-fill" :style="{ width: summary.pct + '%' }"></div>
       </div>
       <div class="pct">{{ summary.pct }}%</div>
+
+      <!-- Celebration banner for new unlocks -->
+      <transition name="fade">
+        <div
+          v-if="showCongrats && newlyUnlocked.length"
+          class="unlock-banner"
+          role="status"
+          aria-live="assertive"
+        >
+          🎉 New category unlocked: <strong>{{ categoryLabels[newlyUnlocked[0]] }}</strong>! Keep going!
+          <button class="btn btn-primary btn-xs" @click="tryNow(newlyUnlocked[0])" aria-label="Try the newly unlocked category now">
+            Try now
+          </button>
+        </div>
+      </transition>
+
+      <!-- Motivation message when under threshold -->
+      <div v-if="encouragement" class="motivate card" role="note" aria-live="polite">
+        <span class="m-emoji" aria-hidden="true">💡</span>
+        <div class="m-text">
+          {{ encouragement }}
+          <div class="m-ctas">
+            <button class="btn btn-secondary btn-xs" @click="$router.push({ name: 'quiz' })">Review Explanations</button>
+            <button class="btn btn-secondary btn-xs" @click="restart">Retry</button>
+          </div>
+        </div>
+      </div>
 
       <div
         v-if="isDaily && dailyMeta"
@@ -177,6 +245,34 @@ function restart() {
   color: var(--primary);
   margin-top: .25rem;
 }
+.unlock-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem .6rem;
+  border-radius: .75rem;
+  border: 1px solid #93c5fd;
+  background: linear-gradient(90deg, rgba(37,99,235,.08), rgba(255,255,255,1));
+  color: #1e3a8a;
+  font-weight: 800;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(37,99,235,.08);
+}
+.motivate {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: .5rem;
+  align-items: center;
+  padding: .6rem .75rem;
+  border: 1px solid #fde68a;
+  border-radius: .75rem;
+  background: linear-gradient(90deg, rgba(245,158,11,.12), rgba(255,255,255,1));
+  color: #92400e;
+}
+.m-emoji { font-size: 1.25rem; }
+.m-text { text-align: left; }
+.m-ctas { display: flex; gap: .5rem; margin-top: .35rem; flex-wrap: wrap; }
+
 .buttons {
   display: flex;
   gap: .75rem;
@@ -240,4 +336,6 @@ function restart() {
   font-weight: 700;
   box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.04);
 }
+.fade-enter-active, .fade-leave-active { transition: opacity .25s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

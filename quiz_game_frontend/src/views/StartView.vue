@@ -5,11 +5,13 @@ import { computed, ref, onMounted } from 'vue'
 import { useDailyQuizStore } from '@/stores/dailyQuiz'
 import { useOfflineStore } from '@/stores/offline'
 import { downloadAllCategories, downloadCategoryPack, exportPackToJson, importPackFromJson } from '@/utils/offlineService'
+import { useCategoryUnlockStore } from '@/stores/categoryUnlocks'
 
 const router = useRouter()
 const quiz = useQuizStore()
 const daily = useDailyQuizStore()
 const offline = useOfflineStore()
+const unlocks = useCategoryUnlockStore()
 
 const busy = ref(false)
 const loadError = ref<string | null>(null)
@@ -94,7 +96,43 @@ async function importCat(c: CategoryKey) {
   input.click()
 }
 
+function isLocked(c: CategoryKey): boolean {
+  return !unlocks.isUnlocked(c)
+}
+function lockedReason(c: CategoryKey): string {
+  return unlocks.getLockedReason(c) || 'Locked'
+}
+
+function clickCategory(c: CategoryKey) {
+  // Allow selection but if locked, do not start; show hint instead.
+  picked.value = c
+}
+
+function keydownCategory(e: KeyboardEvent, c: CategoryKey) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    if (isLocked(c)) {
+      alert(lockedReason(c))
+      return
+    }
+    picked.value = c
+  }
+}
+
+const learningPath = computed(() => {
+  // List of next targets that are still locked with their conditions
+  const list = categories
+    .filter((c) => isLocked(c.key))
+    .map((c) => ({ label: c.label, reason: lockedReason(c.key) }))
+  return list.slice(0, 4)
+})
+
 async function start() {
+  if (isLocked(picked.value)) {
+    // focus remains and show hint
+    alert(lockedReason(picked.value))
+    return
+  }
   if (hasSession.value) {
     const ok = window.confirm('Starting a new quiz will discard your saved progress. Continue?')
     if (!ok) return
@@ -146,6 +184,7 @@ async function resumeDaily() {
 }
 
 onMounted(() => {
+  unlocks.loadUnlocks()
   arAnnounce.value = `Daily quiz for ${todayKey.value}. Current streak ${dailyStreak.value} days.`
 })
 </script>
@@ -241,17 +280,41 @@ onMounted(() => {
           v-for="c in categories"
           :key="c.key"
           class="category"
-          :class="{ active: picked === c.key }"
-          @click="picked = c.key"
+          :class="[{ active: picked === c.key }, isLocked(c.key) ? 'locked' : '']"
+          @click="clickCategory(c.key)"
+          @keydown="(e) => keydownCategory(e, c.key)"
           :aria-pressed="picked === c.key"
+          :aria-label="isLocked(c.key) ? `${c.label} locked: ${lockedReason(c.key)}` : `Select ${c.label}`"
+          tabindex="0"
         >
           <div class="cat-emoji" aria-hidden="true">{{ c.emoji }}</div>
           <div class="cat-info">
-            <div class="cat-label">{{ c.label }}</div>
-            <div class="cat-hint">{{ c.hint }}</div>
+            <div class="cat-label">
+              {{ c.label }}
+              <span v-if="isLocked(c.key)" class="lock" aria-hidden="true">🔒</span>
+            </div>
+            <div class="cat-hint">
+              <template v-if="isLocked(c.key)">
+                {{ lockedReason(c.key) }}
+              </template>
+              <template v-else>
+                {{ c.hint }}
+              </template>
+            </div>
           </div>
         </button>
       </div>
+
+      <aside class="path card" aria-label="Learning Path">
+        <h3 class="path-title">Learning Path</h3>
+        <ul class="path-list">
+          <li v-for="(t, i) in learningPath" :key="i">
+            <span class="dot-blue" aria-hidden="true"></span>
+            <span class="t-label">{{ t.label }}</span>
+            <span class="t-reason">{{ t.reason }}</span>
+          </li>
+        </ul>
+      </aside>
 
       <div class="hero-actions">
         <button v-if="hasSession" class="btn btn-primary" @click="resume" :disabled="busy">
@@ -343,6 +406,11 @@ onMounted(() => {
   border-color: var(--primary);
   box-shadow: 0 0 0 4px var(--ring);
 }
+.category.locked {
+  opacity: .7;
+  cursor: default;
+  border-style: dashed;
+}
 .cat-emoji {
   font-size: 1.4rem;
   width: 2.25rem;
@@ -361,6 +429,19 @@ onMounted(() => {
 .cat-label {
   font-weight: 700;
   color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+.lock {
+  display: inline-flex;
+  align-items: center;
+  padding: .05rem .35rem;
+  border-radius: .5rem;
+  border: 1px solid #e5e7eb;
+  background: linear-gradient(90deg, rgba(17,24,39,.04), rgba(255,255,255,1));
+  color: #111827;
+  font-size: .75rem;
 }
 .cat-hint {
   color: var(--muted);
@@ -456,6 +537,14 @@ onMounted(() => {
   font-weight: 700;
   font-size: .8rem;
 }
+
+.path { padding: .75rem; margin-top: .5rem; border: 1px solid #e5e7eb; }
+.path-title { font-weight: 800; color: var(--text); margin-bottom: .35rem; }
+.path-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; text-align: left; }
+.path-list li { display: grid; grid-template-columns: auto auto 1fr; gap: .4rem; align-items: center; }
+.dot-blue { width: .5rem; height: .5rem; border-radius: 50%; background: #2563EB; box-shadow: 0 0 0 3px rgba(37, 99, 235, .15); }
+.t-label { font-weight: 700; color: var(--text); }
+.t-reason { color: var(--muted); font-size: .9rem; }
 
 .hero-actions {
   display: flex;

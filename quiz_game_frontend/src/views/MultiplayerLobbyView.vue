@@ -78,6 +78,7 @@ onMounted(() => {
     <div class="grid">
       <div class="panel">
         <h3 class="panel-title">Create Room</h3>
+        <p class="mini-hint" aria-live="polite">Note: Multiplayer is exempt from category locks.</p>
         <label class="field">
           <span class="label">Your Name</span>
           <input class="input" v-model="nameInput" placeholder="Enter your name" />
@@ -168,6 +169,7 @@ onMounted(() => {
   background: var(--surface); border: 1px solid #e5e7eb; border-radius: .75rem; padding: .75rem; display: grid; gap: .5rem;
 }
 .panel-title { font-weight: 700; }
+.mini-hint { font-size: .85rem; color: var(--muted); margin-top: -.25rem; }
 .field { display: grid; gap: .25rem; }
 .field.inline { grid-auto-flow: column; align-items: center; gap: .5rem; }
 .label { color: var(--muted); font-size: .9rem; }
