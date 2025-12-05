@@ -13,7 +13,8 @@ const AnalyticsView = () => import('../views/AnalyticsView.vue')
 const ManageOfflineView = () => import('../views/ManageOfflineView.vue')
 
 const router: Router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // Use explicit fallback to '/' if BASE_URL is undefined to avoid dev/preview subpath issues
+  history: createWebHistory(import.meta.env.BASE_URL || '/'),
   routes: [
     { path: '/', name: 'start', component: StartView },
     { path: '/quiz', name: 'quiz', component: QuizView },

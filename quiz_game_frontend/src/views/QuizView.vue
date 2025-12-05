@@ -13,7 +13,12 @@ const quiz = useQuizStore()
 const showCountdown = ref<boolean>(false)
 const isFreshSession = computed(() => {
   const q = router.currentRoute.value.query
-  return q && q.startWithCountdown === '1'
+  const raw = q?.startWithCountdown
+  // normalize value to string for safe comparisons (handle array case)
+  const v = Array.isArray(raw) ? raw[0] : raw
+  const s = typeof v === 'string' ? v : String(v ?? '')
+  // Accept '1' or 'true' (case-insensitive)
+  return s === '1' || s.toLowerCase() === 'true'
 })
 
 // Typed category label map to satisfy strict TS indexing
